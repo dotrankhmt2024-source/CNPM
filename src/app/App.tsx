@@ -1,7 +1,14 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { App as AntApp } from 'antd';
 import { StudentPage } from '../features/student/StudentPage';
-import { OperatorPage } from '../features/operator/OperatorPage';
+import { OperatorLayout } from '../features/operator/OperatorLayout';
+import { OverviewPage } from '../features/operator/pages/OverviewPage';
+import { HubManagementPage } from '../features/operator/pages/HubManagementPage';
+import { DispatchPage } from '../features/operator/pages/DispatchPage';
+import { RedirectPage } from '../features/operator/pages/RedirectPage';
+import { ChargingPage } from '../features/operator/pages/ChargingPage';
+import { ChargingParamsPage } from '../features/operator/pages/ChargingParamsPage';
+import { SimulationPage } from '../features/operator/pages/SimulationPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ProtectedRoute } from '../features/auth/components/ProtectedRoute';
@@ -30,8 +37,18 @@ export default function App() {
               <Route element={<ProtectedRoute allow={['student']} />}>
                 <Route path="/student" element={<StudentPage />} />
               </Route>
-              <Route element={<ProtectedRoute allow={['operator']} />}>
-                <Route path="/operator" element={<OperatorPage />} />
+            </Route>
+
+            {/* Khu vực Nhà điều hành: dùng khung sidebar riêng (OperatorLayout) */}
+            <Route element={<ProtectedRoute allow={['operator']} />}>
+              <Route path="/operator" element={<OperatorLayout />}>
+                <Route index element={<OverviewPage />} />
+                <Route path="hubs" element={<HubManagementPage />} />
+                <Route path="dispatch" element={<DispatchPage />} />
+                <Route path="redirect" element={<RedirectPage />} />
+                <Route path="charging" element={<ChargingPage />} />
+                <Route path="charging/params" element={<ChargingParamsPage />} />
+                <Route path="simulation" element={<SimulationPage />} />
               </Route>
             </Route>
           </Route>
