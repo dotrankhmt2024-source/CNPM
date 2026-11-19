@@ -8,6 +8,9 @@ export default {
         brand: '#2563eb',
         // Bảng màu lấy từ frame "Đăng nhập" trên Figma
         accent: { DEFAULT: '#0F5D4B', dark: '#0B4A3B', soft: '#E7F0EE' },
+        sidebar: '#102A43',
+        sidebarMuted: '#1A3A55',
+        
         ink: '#0B1220',
         muted: '#667085',
         surface: '#F7F8F9',

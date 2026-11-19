@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ConfigProvider, theme } from 'antd';
 
 /**
- * Khung chung cho trang Đăng nhập / Đăng ký: cột ảnh bên trái, cột nội dung bên phải.
+ * Khung chung cho trang Đăng nhập: cột ảnh bên trái, cột nội dung bên phải.
  *
  * Ảnh hero: thả file export từ Figma vào `public/login-hero.jpg`.
  * Nếu chưa có file, lớp gradient bên dưới sẽ hiển thị thay thế (không bị vỡ layout).
@@ -19,7 +19,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           colorLink: '#0F5D4B',
           colorText: '#0B1220',
           colorTextPlaceholder: '#98A2B3',
-          colorBorder: '#E4E7EC',
+          colorBorder: '#E5E7EB',
           borderRadius: 8,
           controlHeight: 40,
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
