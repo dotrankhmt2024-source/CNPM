@@ -31,6 +31,14 @@ import type {
 } from '@/shared/types/domain';
 import { MINUTE, atLocalTime, formatHm } from '@/shared/clock';
 import { sessionBatteryAt, sessionEnergyAt } from '@/shared/domain/chargingMath';
+import {
+  VEHICLE_PROFILES,
+  isConnectorCompatible,
+  type VehicleProfile,
+} from '@/shared/domain/vehicleProfiles';
+
+export { VEHICLE_PROFILES, isConnectorCompatible };
+export type { VehicleProfile };
 
 /* ------------------------------------------------------------------ */
 /* Kiểu dữ liệu                                                        */
@@ -85,24 +93,6 @@ export const DEFAULT_CHARGING_CONFIG: ChargingConfig = {
   autoAllocate: true,
   updatedAt: new Date(0).toISOString(),
 };
-
-export interface VehicleProfile {
-  label: string;
-  capacityKwh: number;
-  /** Công suất sạc tối đa xe nhận được (kW). */
-  maxPowerKw: number;
-  connectors: ConnectorType[];
-}
-
-/** Thông số mặc định theo loại xe (dùng cho xe dùng chung và xe cá nhân chưa khai báo). */
-export const VEHICLE_PROFILES: Record<PersonalVehicleType, VehicleProfile> = {
-  bike: { label: 'Xe đạp điện', capacityKwh: 0.8, maxPowerKw: 0.5, connectors: ['AC'] },
-  motorbike: { label: 'Xe máy điện', capacityKwh: 3.5, maxPowerKw: 2, connectors: ['AC'] },
-  car: { label: 'Ô tô điện', capacityKwh: 60, maxPowerKw: 150, connectors: ['AC', 'DC'] },
-};
-
-export const isConnectorCompatible = (type: PersonalVehicleType, connector: ConnectorType) =>
-  VEHICLE_PROFILES[type].connectors.includes(connector);
 
 export interface ChargeEstimate {
   energyKwh: number;
@@ -512,11 +502,17 @@ function buildSession(state: ChargingState, input: StartSessionInput, now: numbe
   };
 }
 
-/** validateCheckIn: xác nhận mã đặt lịch tại cổng và bắt đầu phiên sạc. */
+/**
+ * validateCheckIn: xác nhận mã đặt lịch tại cổng và bắt đầu phiên sạc.
+ *
+ * `allowEarly` dành cho sinh viên tự lấy chỗ tại cổng: được check-in sớm hơn
+ * `earlyCheckInMinutes`, nhưng vẫn phải còn trong thời gian giữ chỗ.
+ */
 export function validateCheckIn(
   state: ChargingState,
   input: { code: string; studentId?: string },
   now: number,
+  options?: { allowEarly?: boolean },
 ): OpResult<{ session: ChargingSession }> {
   const code = input.code.trim().toUpperCase();
   const reservation = state.chargingBookings.find((item) => item.code === code);
@@ -528,7 +524,7 @@ export function validateCheckIn(
   if (reservation.status !== 'CONFIRMED') return fail('Lịch sạc này không còn hiệu lực để check-in.');
   const config = state.chargingConfig;
   const start = ms(reservation.startAt);
-  if (now < start - config.earlyCheckInMinutes * MINUTE) {
+  if (!options?.allowEarly && now < start - config.earlyCheckInMinutes * MINUTE) {
     return fail(`Chưa đến giờ check-in. Bạn có thể check-in từ ${formatHm(start - config.earlyCheckInMinutes * MINUTE)}.`);
   }
   if (now >= start + config.holdMinutes * MINUTE) return fail('Đã quá thời gian giữ chỗ.');

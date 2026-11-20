@@ -33,6 +33,8 @@ export interface Booking {
   vehicleId: string;
   hubId: string;
   returnHubId: string;
+  /** Chủ lượt đặt — mỗi tài khoản chỉ thấy và thao tác trên lượt đặt của mình. */
+  studentId: string;
   studentName: string;
   status: BookingStatus;
   createdAt: string;
@@ -65,32 +67,22 @@ export interface ParkingReservation {
   endAt: string;
   price: number;
   code: string;
-  status: 'reserved' | 'cancelled';
+  /** Chủ lượt giữ chỗ — mỗi tài khoản chỉ thấy lượt giữ chỗ của mình. */
+  studentId: string;
+  /** Tên người đặt, để nhà điều hành biết vị trí đang do ai giữ/ai đang đỗ. */
+  studentName: string;
+  /**
+   * reserved: đã giữ chỗ, chờ sinh viên nhập mã lấy chỗ
+   * checked_in: đã lấy chỗ (xe đang đỗ)
+   * completed: đã trả chỗ
+   * cancelled / expired: huỷ hoặc quá giờ giữ chỗ
+   */
+  status: 'reserved' | 'checked_in' | 'completed' | 'cancelled' | 'expired';
 }
 
 /* ---------- Đặt lịch sạc ---------- */
-export type ChargingPortStatus = 'free' | 'used' | 'reserved';
-
-export interface ChargingPort {
-  id: string;
-  code: string;
-  hubId: string;
-  power: number;
-  status: ChargingPortStatus;
-}
-
-export interface ChargingReservation {
-  id: string;
-  hubId: string;
-  portCode: string;
-  date: string;
-  startTime: string;
-  durationMinutes: number;
-  power: number;
-  price: number;
-  code: string;
-  status: 'reserved' | 'cancelled';
-}
+/* Cổng sạc thật của hệ thống là `ChargePoint` (src/types/charging.ts). Sinh viên đặt
+   lịch sạc trên chính các cổng đó, nên dữ liệu hiển thị giống hệt bên nhà điều hành. */
 
 /* ---------- Lập lịch sạc ưu tiên & điều phối (nhà điều hành): src/types/charging.ts, src/types/dispatch.ts ---------- */
 
@@ -102,8 +94,6 @@ export interface AppData {
   incidents: Incident[];
   parkingSlots: ParkingSlot[];
   parkingReservations: ParkingReservation[];
-  chargingPorts: ChargingPort[];
-  chargingReservations: ChargingReservation[];
   /** Cổng sạc và lịch sạc theo khung giờ dùng cho lập lịch sạc ưu tiên của nhà điều hành. */
   chargePoints: ChargePoint[];
   chargingBookings: ChargingBooking[];

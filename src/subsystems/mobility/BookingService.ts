@@ -5,8 +5,9 @@
  * Toàn bộ quy tắc nghiệp vụ nằm ở đây; Client chỉ nhìn thấy kết quả qua APIGateway.
  */
 import type { IBooking, VehicleBookingInput } from '@/contracts/Mobility';
-import type { ApiResult, INotification, IPersistence, OperationResult } from '@/contracts';
+import type { ApiResult, IAuth, INotification, IPersistence, OperationResult } from '@/contracts';
 import type { Booking } from '@/shared/types/domain';
+import { occupyFreeSlots, releaseUsedSlots } from '@/shared/domain/parkingMath';
 
 /** Thời gian giữ chỗ sau khi đặt xe (phút) — khớp mô tả "mã hết hạn trong 5 phút". */
 export const PICKUP_HOLD_MINUTES = 5;
@@ -22,10 +23,15 @@ export class BookingService implements IBooking {
   constructor(
     private readonly persistence: IPersistence,
     private readonly notification: INotification,
+    private readonly auth: IAuth,
   ) {}
 
   list(): Booking[] {
     return this.persistence.load().bookings;
+  }
+
+  listByStudent(studentId: string): Booking[] {
+    return this.persistence.load().bookings.filter((booking) => booking.studentId === studentId);
   }
 
   reserveVehicle({ vehicleId, returnHubId }: VehicleBookingInput): ApiResult<{ booking?: Booking }> {
@@ -39,12 +45,14 @@ export class BookingService implements IBooking {
 
     const returnHub = state.hubs.find((item) => item.id === returnHubId) ?? hub;
     const now = new Date();
+    const user = this.auth.currentUser();
     const booking: Booking = {
       id: uid(),
       vehicleId,
       hubId: vehicle.hubId,
       returnHubId: returnHub.id,
-      studentName: 'Sinh viên demo',
+      studentId: user?.id ?? 'guest',
+      studentName: user?.fullName ?? 'Khách',
       status: 'reserved',
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + PICKUP_HOLD_MINUTES * 60_000).toISOString(),
@@ -91,6 +99,8 @@ export class BookingService implements IBooking {
           ? { ...hub, occupiedParking: Math.max(0, hub.occupiedParking - 1) }
           : hub,
       ),
+      // Xe rời bãi → giải phóng một vị trí trên sơ đồ.
+      parkingSlots: releaseUsedSlots(state.parkingSlots, booking.hubId, 1),
     });
     return { ok: true, message: 'Nhận xe thành công' };
   }
@@ -123,6 +133,8 @@ export class BookingService implements IBooking {
       hubs: state.hubs.map((item) =>
         item.id === hub.id ? { ...item, occupiedParking: item.occupiedParking + 1 } : item,
       ),
+      // Xe vừa trả chiếm một vị trí trên sơ đồ bãi đỗ để hai màn hình luôn khớp nhau.
+      parkingSlots: occupyFreeSlots(state.parkingSlots, hub.id, 1),
     });
     this.notification.publish({
       kind: 'booking',

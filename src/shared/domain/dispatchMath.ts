@@ -8,7 +8,7 @@ import type { AppData, DispatchOrder, DispatchStatus, Hub, Vehicle } from '@/sha
 
 export type DispatchState = Pick<
   AppData,
-  'hubs' | 'vehicles' | 'dispatchOrders' | 'dispatchStaff' | 'chargingRequests'
+  'hubs' | 'vehicles' | 'dispatchOrders' | 'dispatchStaff' | 'chargingRequests' | 'parkingSlots'
 >;
 
 export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {

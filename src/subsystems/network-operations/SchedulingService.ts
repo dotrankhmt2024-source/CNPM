@@ -15,6 +15,7 @@ import type {
   ChargingState,
   FreeChargingPort,
   IScheduling,
+  PortWindowState,
   RankedChargingRequest,
 } from '@/contracts/NetworkOperations';
 import type { ApiResult, IClock, IPersistence, OperationResult } from '@/contracts';
@@ -34,6 +35,7 @@ import {
   createChargingReservation,
   createSmartChargingSchedule,
   getFreePortsNow,
+  getPortStateInWindow,
   pickChargingState,
   prioritizeVehicles,
   processQueueOverflow,
@@ -122,6 +124,14 @@ export class SchedulingService implements IScheduling {
     return processQueueOverflow(this.state(), hubId, this.now());
   }
 
+  portStates(hubId: string, start: number, end: number): PortWindowState[] {
+    const state = this.state();
+    const now = this.now();
+    return state.chargePoints
+      .filter((port) => port.hubId === hubId)
+      .map((port) => ({ port, status: getPortStateInWindow(state, port, start, end, now) }));
+  }
+
   /* ------------------------------ Đồng hồ -------------------------------- */
 
   advanceClock(minutes: number): string[] {
@@ -165,6 +175,43 @@ export class SchedulingService implements IScheduling {
       if (ticked.changed) this.save(ticked.state);
       return result;
     }
+    this.save(result.state);
+    return { ok: true, message: result.message };
+  }
+
+  /** Sinh viên tự lấy chỗ sạc bằng mã tại cổng (được check-in sớm). */
+  checkInStudent(code: string, studentId: string): OperationResult {
+    const ticked = runChargingTick(this.state(), this.now());
+    const result = validateCheckIn(ticked.state, { code, studentId }, this.now(), { allowEarly: true });
+    if (!result.ok) {
+      if (ticked.changed) this.save(ticked.state);
+      return result;
+    }
+    this.save(result.state);
+    return { ok: true, message: result.message };
+  }
+
+  /** Sinh viên trả chỗ sạc bằng mã — kết thúc phiên và giải phóng cổng. */
+  checkOutStudent(code: string, studentId: string): OperationResult {
+    const state = this.state();
+    const booking = state.chargingBookings.find(
+      (item) => item.code.trim().toUpperCase() === code.trim().toUpperCase(),
+    );
+    if (!booking) return { ok: false, message: 'Mã trả chỗ sạc không tồn tại.' };
+    if (booking.studentId !== studentId) {
+      return { ok: false, message: 'Mã này không thuộc tài khoản của bạn.' };
+    }
+    if (booking.status !== 'CHECKED_IN') {
+      return { ok: false, message: 'Lịch này chưa được lấy chỗ hoặc đã kết thúc.' };
+    }
+    const session = state.chargingSessions.find(
+      (item) =>
+        item.reservationId === booking.id && (item.status === 'CHARGING' || item.status === 'FULL'),
+    );
+    if (!session) return { ok: false, message: 'Không tìm thấy phiên sạc đang chạy cho lịch này.' };
+
+    const result = completeChargingSession(state, session.id, 'user_stop', this.now());
+    if (!result.ok) return { ok: false, message: result.message };
     this.save(result.state);
     return { ok: true, message: result.message };
   }

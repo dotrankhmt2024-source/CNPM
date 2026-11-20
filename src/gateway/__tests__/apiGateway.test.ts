@@ -68,20 +68,255 @@ describe('APIGateway — Mobility', () => {
     expect(gateway.system.snapshot().parkingSlots.find((item) => item.id === slot.id)?.status).toBe('reserved');
   });
 
+  it('huỷ chỗ đỗ giải phóng vị trí để đặt lại', () => {
+    const slot = gateway.student.parkingSlots('h2').find((item) => item.status === 'free');
+    if (!slot) throw new Error('Hub không còn chỗ trống');
+    const booked = gateway.student.bookParking({
+      hubId: 'h2',
+      slotId: slot.id,
+      vehicleType: 'motorbike',
+      startTime: '09:00',
+      endTime: '11:00',
+    });
+    expect(booked.ok).toBe(true);
+    if (!booked.ok || !booked.reservation) throw new Error(booked.message);
+
+    expect(gateway.student.cancelParking(booked.reservation.id).ok).toBe(true);
+    expect(gateway.system.snapshot().parkingReservations.find((item) => item.id === booked.reservation?.id)?.status).toBe(
+      'cancelled',
+    );
+    expect(gateway.system.snapshot().parkingSlots.find((item) => item.id === slot.id)?.status).toBe('free');
+  });
+
+  it('chỗ đỗ quá khung giờ tự hết hạn khi chạy nhịp nền', () => {
+    const slot = gateway.student.parkingSlots('h3').find((item) => item.status === 'free');
+    if (!slot) throw new Error('Hub không còn chỗ trống');
+    const booked = gateway.student.bookParking({
+      hubId: 'h3',
+      slotId: slot.id,
+      vehicleType: 'motorbike',
+      // Khung giờ đã trôi qua (ISO đầy đủ) để kiểm tra cơ chế tự hết hạn.
+      startTime: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      endTime: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect(booked.ok).toBe(true);
+    if (!booked.ok || !booked.reservation) throw new Error(booked.message);
+
+    gateway.system.tickCharging();
+
+    expect(gateway.system.snapshot().parkingReservations.find((item) => item.id === booked.reservation?.id)?.status).toBe(
+      'expired',
+    );
+    expect(gateway.system.snapshot().parkingSlots.find((item) => item.id === slot.id)?.status).toBe('free');
+  });
+
+  it('đặt lịch sạc của sinh viên hiện ngay trong dữ liệu nhà điều hành và huỷ được', () => {
+    const dateKey = '2026-11-21';
+    const startTime = '09:00';
+    const slots = gateway.student.chargingSlots('h1', dateKey, startTime, 60);
+    const free = slots.find((item) => item.status === 'free');
+    if (!free) throw new Error('Hub không còn cổng sạc trống');
+
+    // Xe cá nhân do sinh viên tự khai báo (không lấy từ đội xe dùng chung).
+    const booked = gateway.student.bookChargingSlot({
+      hubId: 'h1',
+      portId: free.port.id,
+      dateKey,
+      startTime,
+      durationMinutes: 60,
+      vehicleKind: 'personal',
+      vehicleId: 'personal-student-001-xe-cua-toi',
+      vehicleLabel: 'Xe của tôi · 59X1-123.45',
+      vehicleType: 'motorbike',
+      batteryCapacityKwh: 3.5,
+      currentBattery: 30,
+      targetBattery: 80,
+    });
+    expect(booked.ok).toBe(true);
+    if (!booked.ok || !booked.booking) throw new Error(booked.message);
+
+    // Nhà điều hành thấy đúng lịch này trong dữ liệu sạc dùng chung.
+    const operatorState = gateway.operator.chargingState();
+    expect(operatorState.chargingBookings.some((item) => item.id === booked.booking?.id)).toBe(true);
+    // Cổng bị giữ trong đúng khung giờ đã đặt.
+    expect(
+      gateway.student
+        .chargingSlots('h1', dateKey, startTime, 60)
+        .find((item) => item.port.id === free.port.id)?.status,
+    ).toBe('reserved');
+
+    // Sinh viên huỷ → cổng được giải phóng và lịch không còn hiệu lực.
+    expect(gateway.student.cancelChargingSlot(booked.booking.id).ok).toBe(true);
+    expect(
+      gateway.operator.chargingState().chargingBookings.find((item) => item.id === booked.booking?.id)?.status,
+    ).toBe('CANCELLED');
+    expect(
+      gateway.student.chargingSlots('h1', dateKey, startTime, 60).find((item) => item.port.id === free.port.id)?.status,
+    ).toBe('free');
+  });
+
   it('không nhận lịch sạc trên cổng đang bảo trì (phối hợp qua IScheduling)', () => {
     const port = gateway.operator.chargingState().chargePoints.find((item) => item.hubId === 'h1');
     if (!port) throw new Error('Hub không có cổng sạc');
     expect(gateway.operator.setPortMaintenance(port.id, true).ok).toBe(true);
-    const result = gateway.student.bookCharging({
+    const result = gateway.student.bookChargingSlot({
       hubId: 'h1',
-      portCode: port.code,
-      date: '2026-11-21',
-      startTime: '09:00',
+      portId: port.id,
+      dateKey: '2026-11-21',
+      startTime: '10:00',
       durationMinutes: 60,
-      power: 60,
+      vehicleKind: 'personal',
+      vehicleId: 'personal-student-001-xe-cua-toi',
+      vehicleLabel: 'Xe của tôi · 59X1-123.45',
+      vehicleType: 'motorbike',
+      batteryCapacityKwh: 3.5,
+      currentBattery: 30,
+      targetBattery: 80,
     });
     expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/bảo trì/);
     expect(gateway.operator.setPortMaintenance(port.id, false).ok).toBe(true);
+  });
+});
+
+describe('APIGateway — nhập mã lấy chỗ / trả chỗ', () => {
+  it('chỗ đỗ: lấy chỗ rồi trả chỗ cập nhật vị trí và số chỗ trống', () => {
+    expect(gateway.access.login({ email: 'student@demo.local', password: 'Student123!' }).ok).toBe(true);
+    const slot = gateway.student.parkingSlots('h3').find((item) => item.status === 'free');
+    if (!slot) throw new Error('Hub không còn chỗ trống');
+    const occupied = () => gateway.system.snapshot().hubs.find((hub) => hub.id === 'h3')?.occupiedParking;
+    const before = occupied();
+
+    const booked = gateway.student.bookParking({
+      hubId: 'h3',
+      slotId: slot.id,
+      vehicleType: 'Xe máy điện',
+      startTime: '09:00',
+      endTime: '11:00',
+    });
+    if (!booked.ok || !booked.reservation) throw new Error(booked.message);
+    const code = booked.reservation.code;
+    // Nhà điều hành phải biết vị trí này do ai đặt.
+    expect(booked.reservation.studentName).toBe(gateway.access.currentUser()?.fullName);
+    expect(occupied()).toBe((before ?? 0) + 1);
+
+    // Mã sai / chưa lấy chỗ thì không trả được
+    expect(gateway.student.checkInParking('DO000000').ok).toBe(false);
+    expect(gateway.student.checkOutParking(code).ok).toBe(false);
+
+    // Lấy chỗ: vị trí chuyển sang đang dùng, số chỗ trống không đổi
+    expect(gateway.student.checkInParking(code.toLowerCase()).ok).toBe(true);
+    expect(
+      gateway.system.snapshot().parkingReservations.find((item) => item.id === booked.reservation?.id)?.status,
+    ).toBe('checked_in');
+    expect(gateway.system.snapshot().parkingSlots.find((item) => item.id === slot.id)?.status).toBe('used');
+    expect(occupied()).toBe((before ?? 0) + 1);
+
+    // Trả chỗ: giải phóng vị trí
+    expect(gateway.student.checkOutParking(code).ok).toBe(true);
+    expect(
+      gateway.system.snapshot().parkingReservations.find((item) => item.id === booked.reservation?.id)?.status,
+    ).toBe('completed');
+    expect(gateway.system.snapshot().parkingSlots.find((item) => item.id === slot.id)?.status).toBe('free');
+    expect(occupied()).toBe(before);
+  });
+
+  it('lịch sạc: lấy chỗ tạo phiên sạc, trả chỗ kết thúc phiên và giải phóng cổng', () => {
+    const dateKey = '2026-11-22';
+    const startTime = '09:00';
+    const free = gateway.student
+      .chargingSlots('h2', dateKey, startTime, 60)
+      .find((item) => item.status === 'free');
+    if (!free) throw new Error('Hub không còn cổng sạc trống');
+
+    const booked = gateway.student.bookChargingSlot({
+      hubId: 'h2',
+      portId: free.port.id,
+      dateKey,
+      startTime,
+      durationMinutes: 60,
+      vehicleKind: 'personal',
+      vehicleId: 'personal-student-001-xe-cua-toi',
+      vehicleLabel: 'Xe của tôi',
+      vehicleType: 'motorbike',
+      batteryCapacityKwh: 3.5,
+      currentBattery: 30,
+      targetBattery: 80,
+    });
+    if (!booked.ok || !booked.booking) throw new Error(booked.message);
+    const code = booked.booking.code;
+
+    expect(gateway.student.checkInChargingSlot('SAC000000').ok).toBe(false);
+    expect(gateway.student.checkInChargingSlot(code).ok).toBe(true);
+
+    const checkedIn = gateway.operator
+      .chargingState()
+      .chargingBookings.find((item) => item.id === booked.booking?.id);
+    expect(checkedIn?.status).toBe('CHECKED_IN');
+    const session = gateway.operator
+      .chargingState()
+      .chargingSessions.find((item) => item.reservationId === booked.booking?.id);
+    expect(session?.status).toBe('CHARGING');
+
+    expect(gateway.student.checkOutChargingSlot(code).ok).toBe(true);
+    const done = gateway.operator
+      .chargingState()
+      .chargingBookings.find((item) => item.id === booked.booking?.id);
+    expect(done?.status).toBe('COMPLETED');
+    expect(
+      gateway.operator.chargingState().chargingSessions.find((item) => item.id === session?.id)?.status,
+    ).toBe('COMPLETED');
+  });
+});
+
+describe('APIGateway — dữ liệu tách theo tài khoản', () => {
+  it('tài khoản mới chỉ thấy lượt đặt / chỗ đỗ / lịch sạc của chính mình', () => {
+    // Tài khoản demo đặt một xe và một chỗ đỗ.
+    expect(gateway.access.login({ email: 'student@demo.local', password: 'Student123!' }).ok).toBe(true);
+    const demoVehicle = gateway.student.availableVehicles('h2')[0];
+    if (!demoVehicle) throw new Error('Hub không còn xe khả dụng');
+    expect(gateway.student.reserveVehicle({ vehicleId: demoVehicle.id }).ok).toBe(true);
+    const demoSlot = gateway.student.parkingSlots('h4').find((slot) => slot.status === 'free');
+    if (!demoSlot) throw new Error('Hub không còn chỗ trống');
+    expect(
+      gateway.student.bookParking({
+        hubId: 'h4',
+        slotId: demoSlot.id,
+        vehicleType: 'Xe máy điện',
+        startTime: '09:00',
+        endTime: '11:00',
+      }).ok,
+    ).toBe(true);
+
+    // Tạo tài khoản sinh viên mới → dữ liệu phải trống.
+    const registered = gateway.access.register({
+      fullName: 'Sinh viên Mới',
+      email: 'new.student@demo.local',
+      password: 'NewStudent123!',
+      confirmPassword: 'NewStudent123!',
+    });
+    expect(registered.ok).toBe(true);
+    const newcomer = gateway.access.currentUser();
+    if (!newcomer) throw new Error('Không tạo được tài khoản');
+    expect(newcomer.id).not.toBe('student-001');
+
+    expect(gateway.student.myBookings()).toHaveLength(0);
+    expect(gateway.student.myParkingReservations()).toHaveLength(0);
+    expect(gateway.student.myChargingBookings()).toHaveLength(0);
+
+    // Tài khoản mới đặt xe → chỉ mình thấy.
+    const newVehicle = gateway.student.availableVehicles('h1')[0];
+    if (!newVehicle) throw new Error('Hub không còn xe khả dụng');
+    const ownBooking = gateway.student.reserveVehicle({ vehicleId: newVehicle.id });
+    expect(ownBooking.ok).toBe(true);
+    expect(gateway.student.myBookings()).toHaveLength(1);
+    expect(gateway.student.myBookings()[0].studentId).toBe(newcomer.id);
+
+    // Quay lại tài khoản demo: không thấy lượt đặt của tài khoản mới.
+    expect(gateway.access.login({ email: 'student@demo.local', password: 'Student123!' }).ok).toBe(true);
+    expect(gateway.student.myBookings().some((booking) => booking.studentId === newcomer.id)).toBe(false);
+    expect(gateway.student.myBookings().every((booking) => booking.studentId === 'student-001')).toBe(true);
+    expect(gateway.student.myParkingReservations().every((item) => item.studentId === 'student-001')).toBe(true);
   });
 });
 

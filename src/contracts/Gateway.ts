@@ -11,8 +11,6 @@ import type {
   ChargingBooking,
   ChargingConfig,
   ChargingEndReason,
-  ChargingPort,
-  ChargingReservation,
   ChargingRequest,
   DispatchOrder,
   DispatchStaff,
@@ -31,6 +29,7 @@ import type { ApiResult, OperationResult } from './common';
 import type {
   ChargingOverflowInfo,
   ChargingReservationRequest,
+  ChargingSlotRequest,
   ChargingState,
   DemandProjection,
   DispatchSuggestion,
@@ -41,7 +40,7 @@ import type {
 } from './NetworkOperations';
 import type { AlternativeHub, OverloadRisk } from './Mobility';
 import type {
-  ChargingBookingInput,
+  ChargingSlotState,
   ParkingBookingInput,
   VehicleBookingInput,
 } from './Mobility';
@@ -52,10 +51,11 @@ export interface StudentAPI {
   hubDetail(hubId: string): Hub | null;
   availableVehicles(hubId?: string): Vehicle[];
   parkingSlots(hubId: string): ParkingSlot[];
-  chargingPorts(hubId: string): ChargingPort[];
+  /** Trạng thái các cổng sạc của Hub trong khung giờ muốn đặt. */
+  chargingSlots(hubId: string, dateKey: string, startTime: string, durationMinutes: number): ChargingSlotState[];
   myBookings(): Booking[];
   myParkingReservations(): ParkingReservation[];
-  myChargingReservations(): ChargingReservation[];
+  myChargingBookings(): ChargingBooking[];
   pendingOffers(): RedirectOffer[];
   notifications(): AppNotification[];
 
@@ -66,8 +66,14 @@ export interface StudentAPI {
 
   bookParking(input: ParkingBookingInput): ApiResult<{ reservation?: ParkingReservation }>;
   cancelParking(reservationId: string): OperationResult;
-  bookCharging(input: ChargingBookingInput): ApiResult<{ reservation?: ChargingReservation }>;
-  cancelCharging(reservationId: string): OperationResult;
+  /** Nhập mã lấy chỗ đỗ / trả chỗ đỗ. */
+  checkInParking(code: string): OperationResult;
+  checkOutParking(code: string): OperationResult;
+  /** Nhập mã lấy chỗ sạc / trả chỗ sạc. */
+  checkInChargingSlot(code: string): OperationResult;
+  checkOutChargingSlot(code: string): OperationResult;
+  bookChargingSlot(input: ChargingSlotRequest): ApiResult<{ booking?: ChargingBooking }>;
+  cancelChargingSlot(bookingId: string): OperationResult;
 
   respondToOffer(offerId: string, accept: boolean): ApiResult<{ moved?: boolean; warning?: string }>;
 }

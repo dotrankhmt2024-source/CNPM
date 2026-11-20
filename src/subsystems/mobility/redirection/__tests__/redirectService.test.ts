@@ -18,14 +18,15 @@ const NOW = atLocalTime('2026-11-20', '09:00');
 /** HUB A4 (h1) gần đầy, có 1 sinh viên sẽ trả xe về đây, 1 lịch đỗ và 1 lịch sạc tại đây. */
 function overloadedState(): RedirectState {
   const base = pickRedirectState(createInitialData(NOW));
-  const chargingPort = base.chargingPorts.find((port) => port.hubId === 'h1' && port.status === 'free')!;
+  const port = base.chargePoints.find((item) => item.hubId === 'h1' && !item.underMaintenance)!;
   const slot = base.parkingSlots.find((item) => item.hubId === 'h1' && item.status === 'free')!;
+  const startAt = new Date(NOW + 6 * 60 * 60_000).toISOString();
   return {
     ...base,
     hubs: base.hubs.map((hub) => (hub.id === 'h1' ? { ...hub, occupiedParking: 28 } : hub)),
     bookings: [
       {
-        id: 'bk1', vehicleId: 'v5', hubId: 'h2', returnHubId: 'h1', studentName: 'Sinh viên A',
+        id: 'bk1', vehicleId: 'v5', hubId: 'h2', returnHubId: 'h1', studentId: 'student-A', studentName: 'Sinh viên A',
         status: 'picked_up', createdAt: new Date(NOW).toISOString(), expiresAt: new Date(NOW).toISOString(), pickupCode: 'SEMH111111',
       },
     ],
@@ -33,14 +34,21 @@ function overloadedState(): RedirectState {
     parkingReservations: [
       {
         id: 'pk1', hubId: 'h1', slotId: slot.id, slotLabel: slot.label, vehicleType: 'Xe máy',
-        startAt: '13:30', endAt: '17:00', price: 5000, code: 'DO123456', status: 'reserved',
+        startAt: '13:30', endAt: '17:00', price: 5000, code: 'DO123456', studentId: 'student-B', studentName: 'Sinh viên B', status: 'reserved',
       },
     ],
-    chargingPorts: base.chargingPorts.map((port) => (port.id === chargingPort.id ? { ...port, status: 'reserved' } : port)),
-    chargingReservations: [
+    chargingBookings: [
+      // Chỉ giữ đúng một lịch sạc tại Hub quá tải để kiểm tra đề xuất điều hướng.
+      ...base.chargingBookings.filter((booking) => booking.hubId !== 'h1'),
       {
-        id: 'cr1', hubId: 'h1', portCode: chargingPort.code, date: '', startTime: '15:00', durationMinutes: 60,
-        power: chargingPort.power, price: 50000, code: 'SAC999999', status: 'reserved',
+        id: 'cb1', code: 'SAC999999', studentId: 'student-999', studentName: 'Sinh viên C',
+        hubId: 'h1', portId: port.id, portCode: port.code,
+        vehicleKind: 'personal', vehicleId: 'pv-x', vehicleLabel: 'Xe cá nhân test',
+        batteryCapacityKwh: 3.5, currentBattery: 20, targetBattery: 80,
+        date: '2026-11-20', startTime: '15:00', startAt,
+        endAt: new Date(Date.parse(startAt) + 60 * 60_000).toISOString(),
+        durationMinutes: 60, power: port.power, estimatedEnergyKwh: 2.1, price: 50000,
+        priorityScore: 50, status: 'CONFIRMED', createdAt: new Date(NOW).toISOString(),
       },
     ],
   };
@@ -111,9 +119,9 @@ describe('Sinh viên phản hồi đề xuất', () => {
     const parking = next.parkingReservations[0];
     expect(parking.hubId).toBe('h2');
     expect(next.parkingSlots.find((slot) => slot.id === parking.slotId)?.status).toBe('reserved');
-    const charging = next.chargingReservations[0];
+    const charging = next.chargingBookings.find((booking) => booking.id === 'cb1')!;
     expect(charging.hubId).toBe('h2');
-    expect(next.chargingPorts.find((port) => port.hubId === 'h2' && port.code === charging.portCode)?.status).toBe('reserved');
+    expect(charging.portId.startsWith('h2-')).toBe(true);
     expect(next.redirectOffers.filter((offer) => offer.planId === plan.id && offer.status === 'ACCEPTED')).toHaveLength(3);
   });
 

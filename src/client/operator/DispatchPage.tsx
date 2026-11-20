@@ -32,6 +32,7 @@ export function DispatchPage() {
   const orders = useAppStore((state) => state.dispatchOrders);
   const staff = useAppStore((state) => state.dispatchStaff);
   const chargingRequests = useAppStore((state) => state.chargingRequests);
+  const parkingSlots = useAppStore((state) => state.parkingSlots);
   const createDispatchOrder = useAppStore((state) => state.createDispatchOrder);
 
   const [needId, setNeedId] = useState(params.get('to') ?? hubs[0]?.id ?? '');
@@ -47,7 +48,14 @@ export function DispatchPage() {
   const [created, setCreated] = useState<{ order: DispatchOrder; warning?: string | null } | null>(null);
   const [tab, setTab] = useState('active');
 
-  const state = { hubs, vehicles, dispatchOrders: orders, dispatchStaff: staff, chargingRequests };
+  const state = {
+    hubs,
+    vehicles,
+    dispatchOrders: orders,
+    dispatchStaff: staff,
+    chargingRequests,
+    parkingSlots,
+  };
   const need = hubs.find((hub) => hub.id === needId) ?? null;
   const supply = hubs.find((hub) => hub.id === supplyId) ?? null;
   const availableAt = (hubId: string) => dispatchableVehicles(state, hubId).length;

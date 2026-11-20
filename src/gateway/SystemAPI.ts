@@ -22,7 +22,10 @@ export class SystemAPIImpl implements SystemAPI {
   }
 
   tickCharging(): string[] {
-    return this.deps.scheduling.tick();
+    const events = this.deps.scheduling.tick();
+    // Giải phóng chỗ đỗ quá khung giờ để không chặn lượt đặt mới tại cùng Hub.
+    this.deps.parkingCharging.expireOverdue(this.deps.clock.now());
+    return events;
   }
 
   resetDemoData(): void {

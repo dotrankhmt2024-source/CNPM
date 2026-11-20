@@ -2,8 +2,14 @@ import { useState } from 'react';
 import { App as AntApp, Button, Modal, Select } from 'antd';
 import { PageHeader } from '@/client/shared/components/PageHeader';
 import { useAppStore } from '@/client/api/useAppStore';
+import { useMyParkingReservations } from '@/client/api/useMyData';
+import { apiGateway } from '@/gateway';
+import { formatHm } from '@/shared/clock';
 
 const PAGE_SIZE = 12;
+
+const pad = (value: number) => String(value).padStart(2, '0');
+const hmOf = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 
 const timeOptions = Array.from({ length: 30 }, (_, index) => {
   const minutes = 6 * 60 + index * 30;
@@ -32,16 +38,19 @@ const statusStyle = {
 } as const;
 
 export function ParkingPage() {
-  const { message } = AntApp.useApp();
+  const { message, modal } = AntApp.useApp();
   const hubs = useAppStore((state) => state.hubs);
   const slots = useAppStore((state) => state.parkingSlots);
-  const reservations = useAppStore((state) => state.parkingReservations);
+  const reservations = useMyParkingReservations();
   const bookParking = useAppStore((state) => state.bookParking);
+  const cancelParking = useAppStore((state) => state.cancelParking);
 
   const [hubId, setHubId] = useState(hubs[0]?.id ?? '');
   const [vehicleType, setVehicleType] = useState('Xe ô tô (4 chỗ)');
-  const [startTime, setStartTime] = useState('13:30');
-  const [endTime, setEndTime] = useState('17:00');
+  // Khung giờ mặc định tính từ lúc mở trang (bắt đầu sau 30 phút, giữ chỗ 3 tiếng)
+  // để không bao giờ rơi vào khung giờ đã qua.
+  const [startTime, setStartTime] = useState(() => hmOf(new Date(Date.now() + 30 * 60_000)));
+  const [endTime, setEndTime] = useState(() => hmOf(new Date(Date.now() + 210 * 60_000)));
   const [page, setPage] = useState(1);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -49,15 +58,36 @@ export function ParkingPage() {
   const [codeOpen, setCodeOpen] = useState(false);
   const [bookingCode, setBookingCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** Hộp thoại nhập mã lấy chỗ / trả chỗ. */
+  const [checkOpen, setCheckOpen] = useState<null | 'in' | 'out'>(null);
+  const [checkCode, setCheckCode] = useState('');
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   const hub = hubs.find((item) => item.id === hubId) ?? null;
   const hubSlots = slots.filter((slot) => slot.hubId === hubId);
   const totalPages = Math.max(1, Math.ceil(hubSlots.length / PAGE_SIZE));
   const pageSlots = hubSlots.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const freeOnPage = pageSlots.filter((slot) => slot.status === 'free').length;
+  const freeInHub = hubSlots.filter((slot) => slot.status === 'free').length;
   const selectedSlot = hubSlots.find((slot) => slot.id === selectedSlotId) ?? null;
   const activeReservation =
     reservations.find((item) => item.status === 'reserved' && item.hubId === hubId) ?? null;
+  const checkedInReservation =
+    reservations.find((item) => item.status === 'checked_in' && item.hubId === hubId) ?? null;
+  const holdingSlot = checkedInReservation ?? activeReservation;
+  /** Chỉ hiện các lượt còn hiệu lực (đã giữ chỗ / đang đỗ), không hiện lịch sử. */
+  const myReservations = reservations.filter(
+    (item) => item.status === 'reserved' || item.status === 'checked_in',
+  );
+  /** Vị trí đang hiển thị ở ô "Vị trí đã chọn": ưu tiên ô vừa bấm, sau đó tới chỗ đang giữ. */
+  const panelSlot = selectedSlot
+    ? { label: selectedSlot.label, covered: selectedSlot.covered }
+    : holdingSlot
+      ? {
+          label: holdingSlot.slotLabel,
+          covered: hubSlots.find((slot) => slot.id === holdingSlot.slotId)?.covered ?? false,
+        }
+      : null;
   const zone = pageSlots[0]?.zone ?? `Khu A · Tầng ${page}`;
 
   const changeHub = (nextHubId: string) => {
@@ -84,6 +114,34 @@ export function ParkingPage() {
     setConfirmOpen(false);
     setBookingCode(result.reservation.code);
     setCodeOpen(true);
+  };
+
+  /** Huỷ một lượt đặt chỗ (chỉ áp dụng cho lượt đang giữ). */
+  const handleCancelReservation = (reservationId: string) => {
+    const result = cancelParking(reservationId);
+    if (!result.ok) {
+      message.error(result.message);
+      return;
+    }
+    setSelectedSlotId(null);
+    message.success('Đã huỷ chỗ đỗ. Bạn có thể chọn vị trí khác.');
+  };
+
+  /** Nhập mã lấy chỗ / trả chỗ đỗ. */
+  const handleCheckCode = () => {
+    if (!checkOpen) return;
+    const result =
+      checkOpen === 'in'
+        ? apiGateway.student.checkInParking(checkCode)
+        : apiGateway.student.checkOutParking(checkCode);
+    if (!result.ok) {
+      setCheckError(result.message);
+      return;
+    }
+    setCheckError(null);
+    setCheckOpen(null);
+    setCheckCode('');
+    message.success(result.message);
   };
 
   const copyCode = async () => {
@@ -129,11 +187,12 @@ export function ParkingPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-6">
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="section-title">Sơ đồ bãi đỗ</h2>
             <p className="muted-13">
-              Còn {freeOnPage} / {pageSlots.length} chỗ
+              Trang này {freeOnPage}/{pageSlots.length} chỗ · toàn Hub còn {freeInHub}/{hubSlots.length} chỗ trống
             </p>
           </div>
 
@@ -204,43 +263,116 @@ export function ParkingPage() {
           </div>
         </section>
 
-        <aside className="card flex flex-col">
-          <h2 className="text-[19px] font-bold text-ink dark:text-slate-100">
-            {activeReservation ? 'Vị trí đỗ đã đặt' : 'Vị trí đã chọn'}
-          </h2>
+        {/* Lịch đỗ xe của tôi */}
+        <section className="card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">Lịch đỗ xe của tôi</h2>
+            <p className="muted-13">{myReservations.length} lượt đang hiệu lực</p>
+          </div>
 
-          {activeReservation ? (
+          {myReservations.length === 0 ? (
+            <p className="muted-13 mt-2">Bạn chưa có lượt đặt chỗ nào đang hiệu lực.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {myReservations.map((reservation) => {
+                const reservationHub = hubs.find((item) => item.id === reservation.hubId);
+                return (
+                  <li
+                    key={reservation.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-4 py-3 dark:border-slate-800"
+                  >
+                    <div>
+                      <p className="text-[14px] font-semibold text-ink dark:text-slate-100">
+                        {reservation.slotLabel} · {reservationHub?.name.split(' - ')[0] ?? reservation.hubId} ·{' '}
+                        {formatHm(reservation.startAt)} – {formatHm(reservation.endAt)}
+                      </p>
+                      <p className="muted-13">
+                        Mã {reservation.code} · {reservation.price.toLocaleString('vi-VN')} đ
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={
+                          reservation.status === 'checked_in'
+                            ? 'pill-green'
+                            : reservation.status === 'reserved'
+                              ? 'pill-blue'
+                              : 'pill-orange'
+                        }
+                      >
+                        {reservation.status === 'checked_in'
+                          ? 'Đang đỗ'
+                          : reservation.status === 'reserved'
+                            ? 'Đã đặt'
+                            : reservation.status === 'completed'
+                              ? 'Đã trả chỗ'
+                              : reservation.status === 'expired'
+                                ? 'Hết hạn'
+                                : 'Đã huỷ'}
+                      </span>
+
+                      {reservation.status === 'reserved' && (
+                        <>
+                          <Button
+                            size="small"
+                            type="primary"
+                            onClick={() => {
+                              setCheckCode('');
+                              setCheckError(null);
+                              setCheckOpen('in');
+                            }}
+                          >
+                            Nhập mã nhận chỗ
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            onClick={() => {
+                              modal.confirm({
+                                title: 'Huỷ đặt chỗ?',
+                                content: `Lượt đặt ${reservation.code} cho vị trí ${reservation.slotLabel} sẽ bị huỷ và giải phóng chỗ.`,
+                                okText: 'Huỷ chỗ',
+                                cancelText: 'Giữ chỗ',
+                                okButtonProps: { danger: true },
+                                onOk: () => handleCancelReservation(reservation.id),
+                              });
+                            }}
+                          >
+                            Huỷ đặt chỗ
+                          </Button>
+                        </>
+                      )}
+
+                      {reservation.status === 'checked_in' && (
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            setCheckCode('');
+                            setCheckError(null);
+                            setCheckOpen('out');
+                          }}
+                        >
+                          Nhập mã trả chỗ
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+        </div>
+
+        <aside className="card self-start">
+          <h2 className="text-[19px] font-bold text-ink dark:text-slate-100">Vị trí đã chọn</h2>
+
+          {panelSlot ? (
             <>
               <div className="mt-4 rounded-xl bg-[#EAF7EF] p-5 dark:bg-emerald-500/10">
-                <p className="text-[24px] font-bold text-[#176B5B] dark:text-emerald-300">
-                  {activeReservation.slotLabel}
-                </p>
+                <p className="text-[24px] font-bold text-[#176B5B] dark:text-emerald-300">{panelSlot.label}</p>
                 <p className="muted-13 mt-1">
-                  {hubSlots.find((slot) => slot.id === activeReservation.slotId)?.covered
-                    ? 'Chỗ đỗ có mái che'
-                    : 'Chỗ đỗ thường'}
-                </p>
-              </div>
-              <p className="muted-13 mt-4">Mã xác nhận</p>
-              <p className="text-[16px] font-semibold tracking-wide text-ink dark:text-slate-100">
-                {activeReservation.code}
-              </p>
-              <p className="muted-13 mt-1">
-                Hôm nay · {activeReservation.startAt} – {activeReservation.endAt}
-              </p>
-              <p className="mt-4 text-[13px] text-muted dark:text-slate-400">Phí dịch vụ</p>
-              <p className="text-[20px] font-bold text-ink dark:text-slate-100">
-                {activeReservation.price.toLocaleString('vi-VN')} đ
-              </p>
-            </>
-          ) : selectedSlot ? (
-            <>
-              <div className="mt-4 rounded-xl bg-[#EAF7EF] p-5 dark:bg-emerald-500/10">
-                <p className="text-[24px] font-bold text-[#176B5B] dark:text-emerald-300">
-                  {selectedSlot.label}
-                </p>
-                <p className="muted-13 mt-1">
-                  {selectedSlot.covered ? 'Chỗ đỗ có mái che' : 'Chỗ đỗ thường'}
+                  {panelSlot.covered ? 'Chỗ đỗ có mái che' : 'Chỗ đỗ thường'}
                 </p>
               </div>
               <p className="mt-5 text-[13px] text-muted dark:text-slate-400">Phí dịch vụ</p>
@@ -250,12 +382,12 @@ export function ParkingPage() {
             <p className="muted-13 mt-4">Chọn một vị trí còn trống trên sơ đồ bãi đỗ.</p>
           )}
 
-          <div className="mt-auto pt-6">
+          <div className="mt-6">
             <Button
               type="primary"
               size="large"
               block
-              disabled={!selectedSlot || Boolean(activeReservation)}
+              disabled={!selectedSlot || Boolean(holdingSlot)}
               onClick={() => {
                 setError(null);
                 setConfirmOpen(true);
@@ -263,6 +395,17 @@ export function ParkingPage() {
             >
               Xác nhận đặt chỗ
             </Button>
+            {holdingSlot ? (
+              <p className="mt-2 text-center text-[12px] text-muted dark:text-slate-400">
+                {checkedInReservation
+                  ? 'Bạn đang dùng chỗ này — xem mục Lịch đỗ xe của tôi để trả chỗ.'
+                  : 'Bạn đang giữ chỗ này — xem mục Lịch đỗ xe của tôi để nhận hoặc huỷ chỗ.'}
+              </p>
+            ) : !selectedSlot ? (
+              <p className="mt-2 text-center text-[12px] text-muted dark:text-slate-400">
+                Chọn một vị trí còn trống trên sơ đồ bãi đỗ để đặt chỗ.
+              </p>
+            ) : null}
           </div>
         </aside>
       </div>
@@ -391,6 +534,49 @@ export function ParkingPage() {
           </Button>
           <Button type="primary" onClick={copyCode}>
             Lưu mã
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Nhập mã lấy chỗ / trả chỗ */}
+      <Modal
+        open={checkOpen !== null}
+        onCancel={() => {
+          setCheckOpen(null);
+          setCheckError(null);
+        }}
+        footer={null}
+        centered
+        width={480}
+      >
+        <h3 className="text-[20px] font-bold text-ink dark:text-slate-100">
+          {checkOpen === 'in' ? 'Lấy chỗ đỗ xe' : 'Trả chỗ đỗ xe'}
+        </h3>
+        <p className="muted-13 mt-1">
+          {checkOpen === 'in'
+            ? `Nhập mã đặt chỗ (ví dụ ${holdingSlot?.code ?? 'DO000000'}) để xác nhận bạn đã tới bãi.`
+            : 'Nhập mã đặt chỗ để trả vị trí và giải phóng chỗ cho người khác.'}
+        </p>
+
+        <input
+          value={checkCode}
+          onChange={(event) => {
+            setCheckCode(event.target.value);
+            setCheckError(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') handleCheckCode();
+          }}
+          placeholder="Nhập mã đặt chỗ"
+          className="mt-4 w-full rounded-lg border border-line px-4 py-3 text-[15px] uppercase tracking-wide outline-none focus:border-accent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          autoFocus
+        />
+        {checkError && <p className="mt-2 text-[13px] text-red-500">{checkError}</p>}
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button onClick={() => setCheckOpen(null)}>Thoát</Button>
+          <Button type="primary" disabled={!checkCode.trim()} onClick={handleCheckCode}>
+            {checkOpen === 'in' ? 'Lấy chỗ' : 'Trả chỗ'}
           </Button>
         </div>
       </Modal>

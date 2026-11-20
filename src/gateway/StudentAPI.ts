@@ -5,10 +5,23 @@
  * Mobility (IParking/ICharging); tra cứu Hub, xe → NetworkOperations (IMonitoring);
  * đề xuất chuyển Hub → IRedirection.
  */
-import type { Booking, ChargingPort, ChargingReservation, Hub, ParkingReservation, ParkingSlot, RedirectOffer, Vehicle } from '@/shared/types/domain';
+import type {
+  Booking,
+  ChargingBooking,
+  Hub,
+  ParkingReservation,
+  ParkingSlot,
+  RedirectOffer,
+  Vehicle,
+} from '@/shared/types/domain';
 import type { ApiResult, OperationResult } from '@/contracts/common';
 import type { AppNotification } from '@/contracts/AccessIdentity';
-import type { ChargingBookingInput, ParkingBookingInput, VehicleBookingInput } from '@/contracts/Mobility';
+import type {
+  ChargingSlotState,
+  ParkingBookingInput,
+  VehicleBookingInput,
+} from '@/contracts/Mobility';
+import type { ChargingSlotRequest } from '@/contracts/NetworkOperations';
 import type { StudentAPI } from '@/contracts/Gateway';
 import type { GatewayDeps } from './APIGateway';
 
@@ -38,20 +51,23 @@ export class StudentAPIImpl implements StudentAPI {
     return this.deps.parkingCharging.listSlots(hubId);
   }
 
-  chargingPorts(hubId: string): ChargingPort[] {
-    return this.deps.parkingCharging.listPorts(hubId);
+  chargingSlots(hubId: string, dateKey: string, startTime: string, durationMinutes: number): ChargingSlotState[] {
+    return this.deps.parkingCharging.availability(hubId, dateKey, startTime, durationMinutes);
   }
 
   myBookings(): Booking[] {
-    return this.deps.booking.list();
+    const user = this.deps.auth.currentUser();
+    return user ? this.deps.booking.listByStudent(user.id) : [];
   }
 
   myParkingReservations(): ParkingReservation[] {
-    return this.deps.parkingCharging.listParkingReservations();
+    const user = this.deps.auth.currentUser();
+    return user ? this.deps.parkingCharging.listByStudent(user.id) : [];
   }
 
-  myChargingReservations(): ChargingReservation[] {
-    return this.deps.parkingCharging.listChargingReservations();
+  myChargingBookings(): ChargingBooking[] {
+    const user = this.deps.auth.currentUser();
+    return user ? this.deps.parkingCharging.listChargingByStudent(user.id) : [];
   }
 
   pendingOffers(): RedirectOffer[] {
@@ -88,12 +104,39 @@ export class StudentAPIImpl implements StudentAPI {
     return this.deps.parkingCharging.cancelParking(reservationId);
   }
 
-  bookCharging(input: ChargingBookingInput): ApiResult<{ reservation?: ChargingReservation }> {
-    return this.deps.parkingCharging.bookCharging(input);
+  checkInParking(code: string): OperationResult {
+    const user = this.deps.auth.currentUser();
+    if (!user) return { ok: false, message: 'Vui lòng đăng nhập để lấy chỗ.' };
+    return this.deps.parkingCharging.checkIn(code, user.id);
   }
 
-  cancelCharging(reservationId: string): OperationResult {
-    return this.deps.parkingCharging.cancelCharging(reservationId);
+  checkOutParking(code: string): OperationResult {
+    const user = this.deps.auth.currentUser();
+    if (!user) return { ok: false, message: 'Vui lòng đăng nhập để trả chỗ.' };
+    return this.deps.parkingCharging.checkOut(code, user.id);
+  }
+
+  checkInChargingSlot(code: string): OperationResult {
+    const user = this.deps.auth.currentUser();
+    if (!user) return { ok: false, message: 'Vui lòng đăng nhập để lấy chỗ sạc.' };
+    return this.deps.scheduling.checkInStudent(code, user.id);
+  }
+
+  checkOutChargingSlot(code: string): OperationResult {
+    const user = this.deps.auth.currentUser();
+    if (!user) return { ok: false, message: 'Vui lòng đăng nhập để trả chỗ sạc.' };
+    return this.deps.scheduling.checkOutStudent(code, user.id);
+  }
+
+  /** Đặt lịch sạc trên cổng của Hub (dùng chung dữ liệu với màn hình nhà điều hành). */
+  bookChargingSlot(input: ChargingSlotRequest): ApiResult<{ booking?: ChargingBooking }> {
+    const user = this.deps.auth.currentUser();
+    if (!user) return { ok: false, message: 'Vui lòng đăng nhập để đặt lịch sạc.' };
+    return this.deps.parkingCharging.book({ ...input, studentId: user.id, studentName: user.fullName });
+  }
+
+  cancelChargingSlot(bookingId: string): OperationResult {
+    return this.deps.parkingCharging.cancel(bookingId);
   }
 
   respondToOffer(offerId: string, accept: boolean): ApiResult<{ moved?: boolean; warning?: string }> {

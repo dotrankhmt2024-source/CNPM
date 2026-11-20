@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { App as AntApp, Button } from 'antd';
 import { PageHeader } from '@/client/shared/components/PageHeader';
 import { useAppStore } from '@/client/api/useAppStore';
+import { useMyBookings } from '@/client/api/useMyData';
 
 const statusLabel = {
   reserved: 'Đã xác nhận',
@@ -22,7 +23,7 @@ export function BookingsPage() {
   const { message } = AntApp.useApp();
   const hubs = useAppStore((state) => state.hubs);
   const vehicles = useAppStore((state) => state.vehicles);
-  const bookings = useAppStore((state) => state.bookings);
+  const bookings = useMyBookings();
   const cancelBooking = useAppStore((state) => state.cancelBooking);
 
   const handleCancel = (bookingId: string) => {

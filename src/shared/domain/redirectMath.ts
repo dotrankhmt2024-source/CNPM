@@ -21,9 +21,8 @@ export type RedirectState = Pick<
   | 'bookings'
   | 'parkingSlots'
   | 'parkingReservations'
-  | 'chargingPorts'
-  | 'chargingReservations'
   | 'chargePoints'
+  | 'chargingBookings'
   | 'dispatchOrders'
   | 'redirectPlans'
   | 'redirectOffers'
@@ -142,14 +141,14 @@ export function collectAffectedBookings(state: RedirectState, hubId: string): Af
         studentName: 'Sinh viên',
       }),
     );
-  state.chargingReservations
-    .filter((reservation) => reservation.status === 'reserved' && reservation.hubId === hubId)
-    .forEach((reservation) =>
+  state.chargingBookings
+    .filter((booking) => booking.status === 'CONFIRMED' && booking.hubId === hubId)
+    .forEach((booking) =>
       drafts.push({
         kind: 'charging',
-        refId: reservation.id,
-        refLabel: `Cổng sạc ${reservation.portCode} lúc ${reservation.startTime} (mã ${reservation.code})`,
-        studentName: 'Sinh viên',
+        refId: booking.id,
+        refLabel: `Cổng sạc ${booking.portCode} lúc ${booking.startTime} (mã ${booking.code})`,
+        studentName: booking.studentName,
       }),
     );
   return drafts;
@@ -161,9 +160,8 @@ export const pickRedirectState = (data: RedirectState): RedirectState => ({
   bookings: data.bookings,
   parkingSlots: data.parkingSlots,
   parkingReservations: data.parkingReservations,
-  chargingPorts: data.chargingPorts,
-  chargingReservations: data.chargingReservations,
   chargePoints: data.chargePoints,
+  chargingBookings: data.chargingBookings,
   dispatchOrders: data.dispatchOrders,
   redirectPlans: data.redirectPlans,
   redirectOffers: data.redirectOffers,

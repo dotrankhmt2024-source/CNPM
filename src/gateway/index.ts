@@ -35,8 +35,8 @@ const accountService = new AccountService(accounts, notification);
 
 /* ------------------------------ Mobility -------------------------------- */
 const scheduling = new SchedulingService(persistence, clock);
-const booking = new BookingService(persistence, notification);
-const parkingCharging = new ParkingChargingService(persistence, notification, scheduling);
+const booking = new BookingService(persistence, notification, accountService);
+const parkingCharging = new ParkingChargingService(persistence, notification, scheduling, accountService);
 const redirection = new RedirectionService(persistence, accountService, notification, clock);
 
 /* --------------------------- NetworkOperations -------------------------- */

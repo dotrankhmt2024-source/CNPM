@@ -19,6 +19,7 @@
  */
 import type { DispatchEvent, DispatchOrder, Vehicle } from '@/shared/types/domain';
 import { MINUTE } from '@/shared/clock';
+import { occupyFreeSlots, releaseUsedSlots } from '@/shared/domain/parkingMath';
 import {
   capacityWarning,
   checkDestinationCapacity,
@@ -227,6 +228,7 @@ export function startDispatchTransport(
           ? { ...hub, occupiedParking: Math.max(0, hub.occupiedParking - order.quantity) }
           : hub,
       ),
+      parkingSlots: releaseUsedSlots(state.parkingSlots, order.sourceHubId, order.quantity),
     },
   };
 }
@@ -265,6 +267,7 @@ export function completeDispatchOrder(
           ? { ...hub, occupiedParking: Math.min(hub.capacity, hub.occupiedParking + order.quantity) }
           : hub,
       ),
+      parkingSlots: occupyFreeSlots(state.parkingSlots, order.destHubId, order.quantity),
     },
   };
 }
@@ -306,4 +309,5 @@ export const pickDispatchState = (data: DispatchState): DispatchState => ({
   dispatchOrders: data.dispatchOrders,
   dispatchStaff: data.dispatchStaff,
   chargingRequests: data.chargingRequests,
+  parkingSlots: data.parkingSlots,
 });

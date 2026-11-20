@@ -155,27 +155,44 @@ function updateBookingLocation(state: RedirectState, offer: RedirectOffer): { st
         parkingReservations: state.parkingReservations.map((item) =>
           item.id === reservation.id ? { ...item, hubId: target.id, slotId: slot.id, slotLabel: slot.label } : item,
         ),
+        // Chỗ đỗ chuyển từ Hub cũ sang Hub mới → số chỗ đang chiếm cũng chuyển theo.
+        hubs: state.hubs.map((hub) =>
+          hub.id === reservation.hubId
+            ? { ...hub, occupiedParking: Math.max(0, hub.occupiedParking - 1) }
+            : hub.id === target.id
+              ? { ...hub, occupiedParking: Math.min(hub.capacity, hub.occupiedParking + 1) }
+              : hub,
+        ),
       },
     };
   }
 
-  const reservation = state.chargingReservations.find((item) => item.id === offer.refId);
-  if (!reservation || reservation.status !== 'reserved') return { error: 'Lịch đặt sạc không còn hiệu lực.' };
-  const freePorts = state.chargingPorts.filter((item) => item.hubId === target.id && item.status === 'free');
-  const port = freePorts.find((item) => item.power === reservation.power) ?? freePorts[0];
+  // Lịch sạc nằm trên chính các cổng sạc (ChargePoint) mà nhà điều hành quản lý.
+  const booking = state.chargingBookings.find((item) => item.id === offer.refId);
+  if (!booking || booking.status !== 'CONFIRMED') return { error: 'Lịch đặt sạc không còn hiệu lực.' };
+  const start = Date.parse(booking.startAt);
+  const end = Date.parse(booking.endAt);
+  const port = state.chargePoints.find(
+    (item) =>
+      item.hubId === target.id &&
+      !item.underMaintenance &&
+      !state.chargingBookings.some(
+        (other) =>
+          other.id !== booking.id &&
+          other.portId === item.id &&
+          other.status === 'CONFIRMED' &&
+          Date.parse(other.startAt) < end &&
+          start < Date.parse(other.endAt),
+      ),
+  );
   if (!port) return { error: `${target.name} không còn cổng sạc trống.` };
   return {
     state: {
       ...state,
-      chargingPorts: state.chargingPorts.map((item) =>
-        item.hubId === reservation.hubId && item.code === reservation.portCode
-          ? { ...item, status: 'free' }
-          : item.id === port.id
-            ? { ...item, status: 'reserved' }
-            : item,
-      ),
-      chargingReservations: state.chargingReservations.map((item) =>
-        item.id === reservation.id ? { ...item, hubId: target.id, portCode: port.code, power: port.power } : item,
+      chargingBookings: state.chargingBookings.map((item) =>
+        item.id === booking.id
+          ? { ...item, hubId: target.id, portId: port.id, portCode: port.code, power: port.power }
+          : item,
       ),
     },
   };

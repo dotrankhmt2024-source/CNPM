@@ -132,11 +132,24 @@ export interface ChargingReservationRequest {
   price?: number;
 }
 
+/** Trạng thái một cổng sạc trong một khoảng thời gian cụ thể. */
+export interface PortWindowState {
+  port: ChargePoint;
+  status: 'free' | 'reserved' | 'used' | 'maintenance';
+}
+
+/** Yêu cầu đặt lịch sạc do sinh viên gửi lên (gateway tự điền thông tin tài khoản). */
+export type ChargingSlotRequest = Omit<ChargingReservationRequest, 'studentId' | 'studentName'>;
+
 export interface IScheduling {
   now(): number;
   createReservation(input: ChargingReservationRequest): ApiResult<{ reservation?: ChargingBooking }>;
   cancelReservation(reservationId: string): OperationResult;
   checkIn(code: string, studentId?: string): OperationResult;
+  /** Sinh viên tự lấy chỗ sạc bằng mã (cho phép check-in sớm tại cổng). */
+  checkInStudent(code: string, studentId: string): OperationResult;
+  /** Sinh viên trả chỗ sạc bằng mã — kết thúc phiên và giải phóng cổng. */
+  checkOutStudent(code: string, studentId: string): OperationResult;
   completeSession(sessionId: string, reason?: ChargingEndReason): OperationResult;
   requestCharging(
     vehicleId: string,
@@ -162,6 +175,8 @@ export interface IScheduling {
   freePorts(hubId: string): FreeChargingPort[];
   /** Xe vượt công suất + Hub thay thế còn cổng trống. */
   queueOverflow(hubId: string): ChargingOverflowInfo;
+  /** Trạng thái từng cổng của Hub trong khoảng [start, end) — dùng cho màn hình đặt lịch. */
+  portStates(hubId: string, start: number, end: number): PortWindowState[];
 }
 
 /* ------------------------------- Mô phỏng ------------------------------- */

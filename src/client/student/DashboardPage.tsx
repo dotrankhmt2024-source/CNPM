@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/client/shared/components/PageHeader';
 import { useAppStore } from '@/client/api/useAppStore';
 import { useAuthStore } from '@/client/api/useAuthStore';
+import { useMyBookings } from '@/client/api/useMyData';
 
 const statusLabel = {
   reserved: 'Đã xác nhận',
@@ -15,7 +16,7 @@ export function DashboardPage() {
   const user = useAuthStore((state) => state.currentUser);
   const hubs = useAppStore((state) => state.hubs);
   const vehicles = useAppStore((state) => state.vehicles);
-  const bookings = useAppStore((state) => state.bookings);
+  const bookings = useMyBookings();
 
   const availableVehicles = vehicles.filter((vehicle) => vehicle.status === 'available');
   const freeParking = hubs.reduce((sum, hub) => sum + (hub.capacity - hub.occupiedParking), 0);

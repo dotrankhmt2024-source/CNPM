@@ -1,7 +1,6 @@
 import type {
   AppData,
   ChargePoint,
-  ChargingPort,
   ChargingRequest,
   ChargingBooking,
   ChargingSession,
@@ -14,7 +13,8 @@ import type {
   Vehicle,
 } from '@/shared/types/domain';
 import { DEFAULT_CHARGING_CONFIG, estimateCharge, estimatePrice, syncChargingState } from '@/subsystems/network-operations/scheduling/chargingScheduler';
-import { estimateEtaMinutes, hubDistanceKm } from '@/subsystems/network-operations/dispatch/dispatchService';
+import { estimateEtaMinutes, hubDistanceKm } from '@/shared/domain/dispatchMath';
+import { countUnavailableSlots } from '@/shared/domain/parkingMath';
 import { MINUTE, formatHm, toDateKey } from '@/shared/clock';
 
 const hubs: Hub[] = [
@@ -25,12 +25,12 @@ const hubs: Hub[] = [
 ];
 
 /**
- * Sinh sơ đồ bãi đỗ: mỗi Hub 3 tầng x 12 vị trí (A01..A36).
+ * Sinh sơ đồ bãi đỗ: mỗi Hub có đúng `capacity` vị trí (12 vị trí/tầng).
  * Trạng thái lấy theo công thức cố định để mỗi lần tải lại vẫn giống nhau.
  */
 const buildParkingSlots = (): ParkingSlot[] =>
   hubs.flatMap((hub, hubIndex) =>
-    Array.from({ length: 36 }, (_, index) => {
+    Array.from({ length: hub.capacity }, (_, index) => {
       const floor = Math.floor(index / 12) + 1;
       const label = `A${String(index + 1).padStart(2, '0')}`;
       const seed = (index + hubIndex * 5) % 11;
@@ -51,26 +51,6 @@ const buildParkingSlots = (): ParkingSlot[] =>
         covered: index % 3 === 0,
         status,
       } as ParkingSlot;
-    }),
-  );
-
-/* ---------- Trang Đặt lịch sạc của sinh viên (giữ nguyên bản do-dev) ---------- */
-
-/** Mỗi Hub 8 cổng sạc: CS-01..CS-04 là AC 60kW, CS-05..CS-08 là AC 120kW. */
-const buildChargingPorts = (): ChargingPort[] =>
-  hubs.flatMap((hub, hubIndex) =>
-    Array.from({ length: 8 }, (_, index) => {
-      const seed = (index + hubIndex * 3) % 9;
-      const status =
-        seed === 2 || seed === 7 ? 'reserved' : seed === 4 ? 'used' : 'free';
-
-      return {
-        id: `${hub.id}-port-${index + 1}`,
-        code: `CS-${String(index + 1).padStart(2, '0')}`,
-        hubId: hub.id,
-        power: index < 4 ? 60 : 120,
-        status,
-      } as ChargingPort;
     }),
   );
 
@@ -473,16 +453,22 @@ export function createInitialData(now = Date.now()): AppData {
 
   const vehicles = baseVehicles.map((vehicle) => (vehicle.id === 'v3' ? { ...vehicle, status: 'dispatching' as const } : vehicle));
 
+  // Sơ đồ bãi đỗ là nguồn dữ liệu gốc: số chỗ đang chiếm của mỗi Hub phải khớp với nó
+  // để màn hình sinh viên (sơ đồ) và nhà điều hành (số chỗ trống) hiển thị giống nhau.
+  const parkingSlots = buildParkingSlots();
+  const hubsWithOccupancy = hubs.map((hub) => ({
+    ...hub,
+    occupiedParking: countUnavailableSlots(parkingSlots, hub.id),
+  }));
+
   const data: AppData = {
-    hubs,
+    hubs: hubsWithOccupancy,
     vehicles,
     bookings: [],
     chargingRequests,
     incidents: [{ id: 'i1', hubId: 'h4', message: 'Xe EV-052 cần kiểm tra kỹ thuật', resolved: false }],
-    parkingSlots: buildParkingSlots(),
+    parkingSlots,
     parkingReservations: [],
-    chargingPorts: buildChargingPorts(),
-    chargingReservations: [],
     chargePoints: ports,
     chargingBookings,
     chargingSessions,

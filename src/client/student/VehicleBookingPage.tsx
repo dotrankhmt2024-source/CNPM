@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { App as AntApp, Button, Input, Modal } from 'antd';
 import { PageHeader } from '@/client/shared/components/PageHeader';
 import { useAppStore } from '@/client/api/useAppStore';
+import { useMyBookings } from '@/client/api/useMyData';
 import type { Booking, Vehicle } from '@/shared/types/domain';
 
 const blackPill =
@@ -64,7 +65,7 @@ export function VehicleBookingPage() {
 
   const hubs = useAppStore((state) => state.hubs);
   const vehicles = useAppStore((state) => state.vehicles);
-  const bookings = useAppStore((state) => state.bookings);
+  const bookings = useMyBookings();
   const reserveVehicle = useAppStore((state) => state.reserveVehicle);
   const pickupVehicle = useAppStore((state) => state.pickupVehicle);
   const returnVehicle = useAppStore((state) => state.returnVehicle);

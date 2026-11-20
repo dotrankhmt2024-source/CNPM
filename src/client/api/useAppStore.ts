@@ -8,14 +8,13 @@
  */
 import { create } from 'zustand';
 import { apiGateway } from '@/gateway';
-import type { ChargingReservationRequest, DispatchRequest } from '@/contracts';
+import type { ChargingReservationRequest, ChargingSlotRequest, DispatchRequest } from '@/contracts';
 import type {
   AppData,
   Booking,
   ChargingBooking,
   ChargingConfig,
   ChargingEndReason,
-  ChargingReservation,
   DispatchOrder,
   HubStatus,
   ParkingReservation,
@@ -39,14 +38,10 @@ export interface AppCommands {
     startTime: string;
     endTime: string;
   }) => Result & { reservation?: ParkingReservation };
-  bookCharging: (input: {
-    hubId: string;
-    portCode: string;
-    date: string;
-    startTime: string;
-    durationMinutes: number;
-    power: number;
-  }) => Result & { reservation?: ChargingReservation };
+  cancelParking: (reservationId: string) => Result;
+  /** Đặt lịch sạc trên cổng của Hub (dùng chung dữ liệu với nhà điều hành). */
+  bookChargingSlot: (input: ChargingSlotRequest) => Result & { booking?: ChargingBooking };
+  cancelChargingSlot: (bookingId: string) => Result;
   updateHubStatus: (hubId: string, status: HubStatus) => void;
   resolveIncident: (id: string) => void;
 
@@ -100,7 +95,9 @@ const commands: AppCommands = {
   returnVehicle: (bookingId, code) => apiGateway.student.returnVehicle(bookingId, code),
   cancelBooking: (bookingId) => apiGateway.student.cancelBooking(bookingId),
   bookParking: (input) => apiGateway.student.bookParking(input),
-  bookCharging: (input) => apiGateway.student.bookCharging(input),
+  cancelParking: (reservationId) => apiGateway.student.cancelParking(reservationId),
+  bookChargingSlot: (input) => apiGateway.student.bookChargingSlot(input),
+  cancelChargingSlot: (bookingId) => apiGateway.student.cancelChargingSlot(bookingId),
 
   updateHubStatus: (hubId, status) => {
     apiGateway.operator.updateHubStatus(hubId, status);
