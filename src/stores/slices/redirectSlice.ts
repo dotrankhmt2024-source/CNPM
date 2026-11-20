@@ -9,6 +9,7 @@ import {
   closeRedirectionPlan,
   pickRedirectState,
   rejectRedirectionOffer,
+  respondToGeneralNotice,
 } from '../../services/redirectService';
 import { simulatedNow } from '../../services/clock';
 import { useAuthStore } from '../useAuthStore';
@@ -26,6 +27,7 @@ export interface RedirectActions {
   closeRedirectionPlan: (planId: string) => Result;
   acceptRedirectionOffer: (offerId: string) => Result & { moved?: boolean };
   rejectRedirectionOffer: (offerId: string) => Result & { warning?: string };
+  respondToGeneralNotice: (planId: string, accept: boolean) => Result & { warning?: string };
 }
 
 export const createRedirectActions = (set: Setter, get: Getter): RedirectActions => {
@@ -48,6 +50,13 @@ export const createRedirectActions = (set: Setter, get: Getter): RedirectActions
       if (!result.ok) return result;
       set(result.state);
       return { ok: true, message: result.message, moved: result.moved };
+    },
+    respondToGeneralNotice: (planId, accept) => {
+      const studentName = useAuthStore.getState().currentUser?.fullName ?? 'Sinh viên';
+      const result = respondToGeneralNotice(pickRedirectState(get()), { planId, studentName, accept }, now());
+      if (!result.ok) return result;
+      set(result.state);
+      return { ok: true, message: result.message, warning: result.warning };
     },
     rejectRedirectionOffer: (offerId) => {
       const result = rejectRedirectionOffer(pickRedirectState(get()), offerId, now());

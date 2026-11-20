@@ -9,6 +9,7 @@ import {
   findNearbyAlternativeHubs,
   pickRedirectState,
   rejectRedirectionOffer,
+  respondToGeneralNotice,
   type RedirectState,
 } from '../redirectService';
 import { atLocalTime } from '../clock';
@@ -151,5 +152,40 @@ describe('Sinh viên phản hồi đề xuất', () => {
     if (!result.ok) return;
     expect(result.state.redirectPlans.find((item) => item.id === plan.id)?.status).toBe('CLOSED');
     expect(result.state.redirectOffers.filter((offer) => offer.planId === plan.id).every((offer) => offer.status === 'EXPIRED')).toBe(true);
+  });
+});
+
+describe('Gợi ý chung cho sinh viên chưa có lịch đặt', () => {
+  const plan = () => {
+    const base = pickRedirectState(createInitialData(NOW));
+    const result = approveRedirectionPlan(base, { overloadedHubId: 'h1', targetHubId: 'h2', operatorName: 'OP' }, NOW);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.offers).toHaveLength(0);
+    return result;
+  };
+
+  it('bỏ qua → ghi nhận REJECTED và trả cảnh báo nguy cơ chờ lâu', () => {
+    const { state, plan: created } = plan();
+    const result = respondToGeneralNotice(state, { planId: created.id, studentName: 'SV A', accept: false }, NOW);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warning).toMatch(/chờ lâu/);
+    const offer = result.state.redirectOffers.find((item) => item.planId === created.id);
+    expect(offer?.kind).toBe('general');
+    expect(offer?.status).toBe('REJECTED');
+    // Mỗi sinh viên chỉ phản hồi một lần
+    expect(respondToGeneralNotice(result.state, { planId: created.id, studentName: 'SV A', accept: true }, NOW).ok).toBe(false);
+  });
+
+  it('đồng ý → ghi nhận ACCEPTED, không có cảnh báo; phương án đã kết thúc thì không phản hồi được', () => {
+    const { state, plan: created } = plan();
+    const result = respondToGeneralNotice(state, { planId: created.id, studentName: 'SV B', accept: true }, NOW);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warning).toBeUndefined();
+    expect(result.state.redirectOffers.find((item) => item.planId === created.id)?.status).toBe('ACCEPTED');
+    const closed = closeRedirectionPlan(result.state, created.id, NOW);
+    if (!closed.ok) throw new Error(closed.message);
+    expect(respondToGeneralNotice(closed.state, { planId: created.id, studentName: 'SV C', accept: true }, NOW).ok).toBe(false);
   });
 });

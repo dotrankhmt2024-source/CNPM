@@ -3,8 +3,12 @@
  * (sequence diagram 2.9, activity diagram 3.9 trong báo cáo nhóm).
  * ============================================================ */
 
-/** Loại lịch đặt của sinh viên bị ảnh hưởng khi Hub quá tải. */
-export type RedirectTargetKind = 'vehicle_return' | 'parking' | 'charging';
+/**
+ * Loại đề xuất:
+ *  - vehicle_return / parking / charging: lịch đặt của sinh viên tại Hub quá tải
+ *  - general: gợi ý chung cho sinh viên chưa có lịch đặt (ghi nhận khi sinh viên phản hồi)
+ */
+export type RedirectTargetKind = 'vehicle_return' | 'parking' | 'charging' | 'general';
 
 /**
  * Trạng thái đề xuất gửi tới sinh viên:

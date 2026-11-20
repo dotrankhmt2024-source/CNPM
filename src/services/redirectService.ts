@@ -51,6 +51,7 @@ export const REDIRECT_KIND_LABEL: Record<RedirectTargetKind, string> = {
   vehicle_return: 'Trả xe',
   parking: 'Đặt chỗ đỗ',
   charging: 'Đặt lịch sạc',
+  general: 'Gợi ý chung',
 };
 
 /* ------------------------------------------------------------------ */
@@ -382,6 +383,47 @@ export function rejectRedirectionOffer(state: RedirectState, offerId: string, no
         item.id === offerId ? { ...item, status: 'REJECTED', respondedAt: iso(now), note: 'Sinh viên bỏ qua' } : item,
       ),
     },
+  };
+}
+
+/**
+ * Sinh viên chưa có lịch đặt phản hồi gợi ý chung: Đồng ý (sẽ dùng Hub thay thế) hoặc
+ * Bỏ qua (vẫn tới Hub cũ, kèm cảnh báo chờ lâu). Lựa chọn được ghi nhận cho nhà điều hành.
+ */
+export function respondToGeneralNotice(
+  state: RedirectState,
+  input: { planId: string; studentName: string; accept: boolean },
+  now: number,
+): RedirectResult<{ warning?: string }> {
+  const plan = state.redirectPlans.find((item) => item.id === input.planId);
+  if (!plan || plan.status !== 'ACTIVE') return fail('Phương án điều hướng không còn hiệu lực.');
+  const answered = state.redirectOffers.some(
+    (offer) => offer.planId === plan.id && offer.kind === 'general' && offer.studentName === input.studentName,
+  );
+  if (answered) return fail('Bạn đã phản hồi gợi ý này.');
+  const from = state.hubs.find((hub) => hub.id === plan.overloadedHubId);
+  const to = state.hubs.find((hub) => hub.id === plan.targetHubId);
+  const offer: RedirectOffer = {
+    id: makeId('ro'),
+    planId: plan.id,
+    kind: 'general',
+    refId: plan.id,
+    refLabel: `Gợi ý dùng ${to?.name ?? 'Hub thay thế'} thay cho ${from?.name ?? 'Hub quá tải'}`,
+    studentName: input.studentName,
+    fromHubId: plan.overloadedHubId,
+    toHubId: plan.targetHubId,
+    status: input.accept ? 'ACCEPTED' : 'REJECTED',
+    sentAt: plan.createdAt,
+    respondedAt: iso(now),
+    note: input.accept ? undefined : 'Sinh viên bỏ qua',
+  };
+  return {
+    ok: true,
+    message: input.accept
+      ? `Đã ghi nhận. Hãy tới ${to?.name ?? 'Hub thay thế'} để đặt xe, đỗ xe hoặc sạc.`
+      : 'Đã ghi nhận lựa chọn của bạn.',
+    warning: input.accept ? undefined : `${from?.name ?? 'Hub'} đang quá tải — bạn có thể phải chờ lâu hơn bình thường.`,
+    state: { ...state, redirectOffers: [offer, ...state.redirectOffers] },
   };
 }
 
