@@ -381,6 +381,10 @@ export interface ReservationInput {
   dateKey: string;
   /** HH:mm */
   startTime: string;
+  /** Giữ cổng trong số phút cố định (bỏ qua ước tính theo mức pin). */
+  durationMinutes?: number;
+  /** Phí cố định (bỏ qua công thức theo kWh). */
+  price?: number;
 }
 
 /** createChargingReservation: kiểm tra hợp lệ, chống trùng lịch, tính ưu tiên, giữ khung giờ. */
@@ -420,6 +424,12 @@ export function createChargingReservation(
     portPowerKw: port.power,
     slotMinutes: config.slotMinutes,
   });
+  if (input.durationMinutes !== undefined) {
+    estimate.durationMinutes = Math.max(
+      config.slotMinutes,
+      Math.ceil(input.durationMinutes / config.slotMinutes) * config.slotMinutes,
+    );
+  }
   if (estimate.durationMinutes > config.maxSessionMinutes) {
     return fail(
       `Thời lượng sạc dự kiến (${estimate.durationMinutes} phút) vượt mức tối đa ${config.maxSessionMinutes} phút. Hãy giảm mức pin mục tiêu.`,
@@ -473,7 +483,7 @@ export function createChargingReservation(
     durationMinutes: estimate.durationMinutes,
     power: port.power,
     estimatedEnergyKwh: estimate.energyKwh,
-    price: estimatePrice(estimate.energyKwh, config),
+    price: input.price ?? estimatePrice(estimate.energyKwh, config),
     priorityScore: score,
     status: 'CONFIRMED',
     createdAt: iso(now),

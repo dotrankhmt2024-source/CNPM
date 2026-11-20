@@ -20,7 +20,8 @@ import {
   validateCheckIn,
   type ReservationInput,
 } from '../../services/chargingScheduler';
-import { simulatedNow } from '../../services/clock';
+import { simulatedNow, toDateKey } from '../../services/clock';
+import { useAuthStore } from '../useAuthStore';
 
 type Result = { ok: boolean; message: string };
 type Setter = (partial: Partial<AppData>) => void;
@@ -35,6 +36,19 @@ export interface ChargingActions {
   tickCharging: () => string[];
 
   createChargingReservation: (input: ReservationInput) => Result & { reservation?: ChargingReservation };
+  /**
+   * Giao diện đặt lịch của trang Sinh viên (bản do-dev): đặt cổng `portCode` tại `hubId`
+   * lúc `startTime` hôm nay. Lịch được lưu chung với lịch sạc theo khung giờ nên
+   * hiển thị trên màn hình Lập lịch sạc ưu tiên của nhà điều hành.
+   */
+  bookCharging: (input: {
+    hubId: string;
+    portCode: string;
+    date: string;
+    startTime: string;
+    durationMinutes: number;
+    power: number;
+  }) => Result & { reservation?: ChargingReservation };
   cancelChargingReservation: (reservationId: string) => Result;
   checkInCharging: (code: string, studentId?: string) => Result;
   completeChargingSession: (sessionId: string, reason?: ChargingEndReason) => Result;
@@ -103,6 +117,36 @@ export const createChargingActions = (set: Setter, get: Getter): ChargingActions
       if (!result.ok) return result;
       set(result.state);
       return { ok: true, message: result.message, reservation: result.reservation };
+    },
+
+    bookCharging: ({ hubId, portCode, startTime, durationMinutes, power }) => {
+      const port = get().chargingPorts.find((item) => item.hubId === hubId && item.code === portCode);
+      if (!port) return { ok: false, message: 'Không tìm thấy cổng sạc.' };
+      const user = useAuthStore.getState().currentUser;
+      const result = createChargingReservation(
+        state(),
+        {
+          studentId: user?.id ?? 'student',
+          studentName: user?.fullName ?? 'Sinh viên',
+          hubId,
+          portId: port.id,
+          vehicleKind: 'personal',
+          vehicleId: `xe-${user?.id ?? 'sv'}`,
+          vehicleLabel: `Xe của ${user?.fullName ?? 'sinh viên'}`,
+          vehicleType: 'car',
+          batteryCapacityKwh: 60,
+          currentBattery: 20,
+          targetBattery: 80,
+          dateKey: toDateKey(now()),
+          startTime,
+          durationMinutes,
+          price: power >= 120 ? 90000 : 50000,
+        },
+        now(),
+      );
+      if (!result.ok) return result;
+      set(result.state);
+      return { ok: true, message: 'Đặt chỗ sạc thành công', reservation: result.reservation };
     },
 
     cancelChargingReservation: (reservationId) => {

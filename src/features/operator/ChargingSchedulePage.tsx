@@ -9,7 +9,7 @@ import { useSimNow } from '../../hooks/useSimulationClock';
 import { useAppStore } from '../../stores/useAppStore';
 import { pickChargingState, prioritizeVehicles, sessionBatteryAt } from '../../services/chargingScheduler';
 import { formatDateTime, formatHm, formatMoney, toDateKey } from '../../services/clock';
-import type { ChargingSession } from '../../types/domain';
+import type { ChargingReservation, ChargingSession } from '../../types/domain';
 import {
   END_REASON_LABEL,
   PORT_STATUS_LABEL,
@@ -30,6 +30,7 @@ export function ChargingSchedulePage() {
   const createSmartChargingSchedule = useAppStore((state) => state.createSmartChargingSchedule);
   const completeChargingSession = useAppStore((state) => state.completeChargingSession);
   const setPortMaintenance = useAppStore((state) => state.setPortMaintenance);
+  const checkInCharging = useAppStore((state) => state.checkInCharging);
   const now = useSimNow(1000);
   const chargingState = pickChargingState(data);
 
@@ -87,6 +88,7 @@ export function ChargingSchedulePage() {
             label: session.vehicleLabel,
             battery: Math.round(sessionBatteryAt(session, now)),
             tag: session.status === 'COMPLETED' ? 'Đã sạc' : session.status === 'FULL' ? 'Đã đầy' : 'Đang sạc',
+            reservation: undefined as ChargingReservation | undefined,
           })),
         ...chargingReservations
           .filter(
@@ -98,9 +100,17 @@ export function ChargingSchedulePage() {
             label: item.vehicleLabel,
             battery: item.currentBattery,
             tag: formatHm(item.startAt),
+            reservation: item,
           })),
       ].sort((a, b) => a.time - b.time)
     : [];
+  /** Lịch đang trong khung check-in (trước giờ bắt đầu ít phút đến hết thời gian giữ chỗ). */
+  const canCheckIn = (reservation: ChargingReservation) => {
+    const start = Date.parse(reservation.startAt);
+    return (
+      now >= start - chargingConfig.earlyCheckInMinutes * 60000 && now < start + chargingConfig.holdMinutes * 60000
+    );
+  };
   const activeSession = activePort ? liveSessions.find((session) => session.portId === activePort.id) : undefined;
 
   const historyRows = chargingSessions
@@ -276,6 +286,26 @@ export function ChargingSchedulePage() {
                                   </span>
                                   <span className="text-[12px] font-medium text-ink dark:text-slate-100">Pin {item.battery}%</span>
                                   <span className="rounded-full bg-[#0B1220] px-2.5 py-1 text-[11px] font-semibold text-white">{item.tag}</span>
+                                  {item.reservation && canCheckIn(item.reservation) && (
+                                    <Button
+                                      size="small"
+                                      type="primary"
+                                      onClick={() =>
+                                        modal.confirm({
+                                          title: `Xác nhận check-in ${item.reservation!.code}?`,
+                                          content: `${item.reservation!.studentName} · ${item.reservation!.vehicleLabel} — cổng ${item.reservation!.portCode} sẽ bắt đầu cấp điện.`,
+                                          okText: 'Bắt đầu sạc',
+                                          cancelText: 'Thoát',
+                                          onOk: () => {
+                                            const result = checkInCharging(item.reservation!.code);
+                                            result.ok ? message.success(result.message) : message.error(result.message);
+                                          },
+                                        })
+                                      }
+                                    >
+                                      Check-in
+                                    </Button>
+                                  )}
                                 </div>
                               ))}
                               {portSchedule.length === 0 && <p className="muted-13">Cổng chưa có lịch sạc nào.</p>}

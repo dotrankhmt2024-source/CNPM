@@ -97,8 +97,8 @@ const baseVehicles: Vehicle[] = [
 ];
 
 const personalVehicles: PersonalVehicle[] = [
-  { id: 'pv1', ownerId: 'student-001', licensePlate: '51K-888.88', model: 'VinFast VF 8', type: 'car', batteryCapacityKwh: 82 },
-  { id: 'pv2', ownerId: 'student-001', licensePlate: '59X1-246.80', model: 'VinFast Klara S', type: 'motorbike', batteryCapacityKwh: 3.5 },
+  { id: 'pv1', ownerId: 'student-206', licensePlate: '51K-888.88', model: 'VinFast VF 8', type: 'car', batteryCapacityKwh: 82 },
+  { id: 'pv2', ownerId: 'student-206', licensePlate: '59X1-246.80', model: 'VinFast Klara S', type: 'motorbike', batteryCapacityKwh: 3.5 },
 ];
 
 const dispatchStaff: DispatchStaff[] = [
@@ -185,15 +185,15 @@ export function createInitialData(now = Date.now()): AppData {
 
   const yesterday = ago(24 * 60);
   const chargingReservations: ChargingReservation[] = [
-    // Lịch của tài khoản demo, bắt đầu sau 5 phút → có thể check-in ngay (mã cố định để demo).
+    // Lịch bắt đầu sau 5 phút → nhà điều hành có thể xác nhận check-in ngay (mã cố định để demo).
     makeReservation({
-      id: 'rsv-demo-1', code: 'SAC246810', studentId: 'student-001', studentName: 'Sinh viên Demo',
+      id: 'rsv-demo-1', code: 'SAC246810', studentId: 'student-206', studentName: 'Trần Minh Quân',
       hubId: 'h1', portCode: 'CS-02', vehicleKind: 'personal', vehicleId: 'pv2',
       vehicleLabel: 'VinFast Klara S · 59X1-246.80', vehicleType: 'motorbike', capacity: 3.5,
       current: 22, target: 85, start: now + 5 * MINUTE,
     }),
     makeReservation({
-      id: 'rsv-demo-2', code: 'SAC135790', studentId: 'student-001', studentName: 'Sinh viên Demo',
+      id: 'rsv-demo-2', code: 'SAC135790', studentId: 'student-206', studentName: 'Trần Minh Quân',
       hubId: 'h1', portCode: 'CS-08', vehicleKind: 'personal', vehicleId: 'pv1',
       vehicleLabel: 'VinFast VF 8 · 51K-888.88', vehicleType: 'car', capacity: 82,
       current: 30, target: 80, start: slotAfter(180),
@@ -229,10 +229,10 @@ export function createInitialData(now = Date.now()): AppData {
       vehicleLabel: 'VinFast Feliz · 59X2-555.66', vehicleType: 'motorbike', capacity: 3.5,
       current: 30, target: 80, start: slotAfter(240),
     }),
-    // Lịch sử của tài khoản demo
+    // Lịch sử đã sạc / bỏ chỗ
     {
       ...makeReservation({
-        id: 'rsv-h1', code: 'SAC112233', studentId: 'student-001', studentName: 'Sinh viên Demo',
+        id: 'rsv-h1', code: 'SAC112233', studentId: 'student-206', studentName: 'Trần Minh Quân',
         hubId: 'h2', portCode: 'CS-03', vehicleKind: 'personal', vehicleId: 'pv2',
         vehicleLabel: 'VinFast Klara S · 59X1-246.80', vehicleType: 'motorbike', capacity: 3.5,
         current: 18, target: 80, start: yesterday - 120 * MINUTE,
@@ -244,7 +244,7 @@ export function createInitialData(now = Date.now()): AppData {
     },
     {
       ...makeReservation({
-        id: 'rsv-h2', code: 'SAC445566', studentId: 'student-001', studentName: 'Sinh viên Demo',
+        id: 'rsv-h2', code: 'SAC445566', studentId: 'student-206', studentName: 'Trần Minh Quân',
         hubId: 'h1', portCode: 'CS-07', vehicleKind: 'personal', vehicleId: 'pv1',
         vehicleLabel: 'VinFast VF 8 · 51K-888.88', vehicleType: 'car', capacity: 82,
         current: 40, target: 80, start: yesterday + 300 * MINUTE,
@@ -325,7 +325,7 @@ export function createInitialData(now = Date.now()): AppData {
     {
       ...session({
         id: 'ses-h1', hubId: 'h2', portCode: 'CS-03', vehicleKind: 'personal', vehicleId: 'pv2',
-        vehicleLabel: 'VinFast Klara S · 59X1-246.80', ownerName: 'Sinh viên Demo', capacity: 3.5, maxPower: 2,
+        vehicleLabel: 'VinFast Klara S · 59X1-246.80', ownerName: 'Trần Minh Quân', capacity: 3.5, maxPower: 2,
         start: yesterday - 118 * MINUTE, from: 18, to: 80, reservationId: 'rsv-h1',
       }),
       status: 'COMPLETED',

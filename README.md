@@ -65,11 +65,11 @@ Logic nghiệp vụ viết dạng hàm thuần, có unit test, bám theo Class d
 | `src/types/charging.ts`, `src/types/dispatch.ts` | Mô hình dữ liệu |
 | `src/services/__tests__/*` | Test case 4.7, 4.8, 4.13–4.16 và các trường hợp biên (`npm test`) |
 
-**Lịch sạc theo khung giờ** (`/student/dat-sac`): chọn Hub, ngày (7 ngày tới), xe cá nhân/xe đang thuê,
-mức pin hiện tại → mục tiêu. Hệ thống ước tính điện năng và thời lượng (làm tròn theo khung 30 phút),
-hiển thị số cổng trống của từng khung giờ, chặn trùng lịch theo cổng và theo xe, kiểm tra đầu nối AC/DC.
-Khung giờ đầy → gợi ý khung giờ / Hub khác; Hub cao điểm → cảnh báo chờ lâu. Check-in bằng mã từ
-10 phút trước đến 10 phút sau giờ bắt đầu, quá hạn → tự hủy (bỏ chỗ) và giải phóng cổng.
+**Lịch sạc theo khung giờ** (`/operator/lich-sac`, tab "Lịch theo khung giờ"): sơ đồ theo cổng × khung
+30 phút trong ngày gồm lịch đặt, phiên đang sạc / đã đầy / đã xong, bỏ chỗ. Service chặn trùng lịch theo cổng
+và theo xe, kiểm tra đầu nối AC/DC; lịch không check-in trong thời gian giữ chỗ tự hủy (bỏ chỗ) và giải phóng
+cổng. Nhà điều hành xác nhận check-in tại cổng trong "Lịch sạc chi tiết". Trang Đặt lịch sạc của sinh viên
+(`/student/dat-sac`) giữ nguyên bản `do-dev`, đặt lịch qua `bookCharging` và dùng chung dữ liệu này.
 
 **Bộ lập lịch ưu tiên** (`/operator/lich-sac`): điểm = (100 − pin) × 0,6 + 15 (pin ≤ ngưỡng nguy cấp)
 + tối đa 25 (sắp có chuyến đi trong cửa sổ thời gian) + 10 (xe dùng chung) + tối đa 10 (thời gian chờ).
@@ -86,7 +86,7 @@ Xe bị khóa khi tạo lệnh, rời Hub nguồn khi xuất phát, nhập Hub �
 chỗ trước cho xe đang đến. Theo dõi tiến độ và trễ hạn theo ETA, lịch sử có bộ lọc và nhật ký từng lệnh.
 
 **Demo**: nút đồng hồ ở góc phải (`+5′ / +15′ / +1 giờ`) tua nhanh thời gian để thấy lịch quá hạn, xe sạc đầy,
-xe tới nơi. Tài khoản sinh viên demo có sẵn lịch mã `SAC246810` (check-in được ngay sau khi tải trang).
+xe tới nơi. HUB A4 cổng CS-02 có sẵn lịch mã `SAC246810` bắt đầu sau 5 phút (nhà điều hành check-in được ngay).
 HUB C2 có sẵn dữ liệu test case 4.13/4.14 (5 xe pin 8/15/40/60/75%, 3 cổng trống).
 
 ## Phân công gợi ý
