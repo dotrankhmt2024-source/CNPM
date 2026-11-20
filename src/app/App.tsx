@@ -1,9 +1,20 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { App as AntApp } from 'antd';
-import { StudentPage } from '../features/student/StudentPage';
-import { OperatorPage } from '../features/operator/OperatorPage';
+import { OperatorDashboardPage } from '../features/operator/OperatorDashboardPage';
+import { HubManagementPage } from '../features/operator/HubManagementPage';
+import { DispatchPage } from '../features/operator/DispatchPage';
+import { RoutingPage } from '../features/operator/RoutingPage';
+import { ChargingSchedulePage } from '../features/operator/ChargingSchedulePage';
+import { SimulationPage } from '../features/operator/SimulationPage';
+import { DashboardPage } from '../features/student/DashboardPage';
+import { HubSearchPage } from '../features/student/HubSearchPage';
+import { VehicleBookingPage } from '../features/student/VehicleBookingPage';
+import { ParkingPage } from '../features/student/ParkingPage';
+import { ChargingPage } from '../features/student/ChargingPage';
+import { BookingsPage } from '../features/student/BookingsPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
+import { SettingsPage } from '../features/settings/SettingsPage';
 import { ProtectedRoute } from '../features/auth/components/ProtectedRoute';
 import { homeFor } from '../features/auth/authRoutes';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -27,11 +38,25 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<HomeRedirect />} />
+
               <Route element={<ProtectedRoute allow={['student']} />}>
-                <Route path="/student" element={<StudentPage />} />
+                <Route path="/student" element={<DashboardPage />} />
+                <Route path="/student/hub" element={<HubSearchPage />} />
+                <Route path="/student/dat-xe" element={<VehicleBookingPage />} />
+                <Route path="/student/cho-do" element={<ParkingPage />} />
+                <Route path="/student/dat-sac" element={<ChargingPage />} />
+                <Route path="/student/lich-cua-toi" element={<BookingsPage />} />
+                <Route path="/student/cai-dat" element={<SettingsPage />} />
               </Route>
+
               <Route element={<ProtectedRoute allow={['operator']} />}>
-                <Route path="/operator" element={<OperatorPage />} />
+                <Route path="/operator" element={<OperatorDashboardPage />} />
+                <Route path="/operator/hub" element={<HubManagementPage />} />
+                <Route path="/operator/dieu-phoi" element={<DispatchPage />} />
+                <Route path="/operator/dieu-huong" element={<RoutingPage />} />
+                <Route path="/operator/lich-sac" element={<ChargingSchedulePage />} />
+                <Route path="/operator/mo-phong" element={<SimulationPage />} />
+                <Route path="/operator/cai-dat" element={<SettingsPage />} />
               </Route>
             </Route>
           </Route>

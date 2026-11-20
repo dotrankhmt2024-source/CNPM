@@ -1,131 +1,119 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
-import { App as AntApp, Button, ConfigProvider, Tag, theme } from 'antd';
-import {
-  Activity,
-  Bike,
-  LogOut,
-  Moon,
-  RotateCcw,
-  Sun,
-  UserRound,
-  Zap,
-  type LucideIcon,
-} from 'lucide-react';
-import { useAppStore } from '../stores/useAppStore';
-import { useAuthStore } from '../stores/useAuthStore';
+import { App as AntApp, ConfigProvider, theme } from 'antd';
 import { homeFor, roleLabel } from '../features/auth/authRoutes';
-import type { UserRole } from '../types/auth';
+import { useAuthStore } from '../stores/useAuthStore';
+import { useUiStore } from '../stores/useUiStore';
+import { useChargingTicker, useCrossTabSync } from '../hooks/useSimulationClock';
+import { RedirectNotifier } from '../features/redirect/RedirectNotifier';
 
 interface NavItem {
   to: string;
   label: string;
-  icon: LucideIcon;
-  roles: UserRole[];
+  /** Chỉ khớp chính xác đường dẫn (dùng cho mục Tổng quan). */
+  end?: boolean;
 }
 
-const links: NavItem[] = [
-  { to: '/student', label: 'Sinh viên', icon: Bike, roles: ['student'] },
-  { to: '/operator', label: 'Nhà điều hành', icon: Activity, roles: ['operator'] },
+const studentNav: NavItem[] = [
+  { to: '/student', label: 'Tổng quan', end: true },
+  { to: '/student/hub', label: 'Tìm kiếm Hub' },
+  { to: '/student/dat-xe', label: 'Đặt xe' },
+  { to: '/student/cho-do', label: 'Đặt chỗ đỗ' },
+  { to: '/student/dat-sac', label: 'Đặt lịch sạc' },
 ];
 
-/** Khung ứng dụng sau khi đăng nhập: header (nav theo vai trò, đổi theme, đăng xuất) + nội dung. */
+const operatorNav: NavItem[] = [
+  { to: '/operator', label: 'Tổng quan', end: true },
+  { to: '/operator/hub', label: 'Quản lý HUB' },
+  { to: '/operator/dieu-phoi', label: 'Điều phối xe' },
+  { to: '/operator/dieu-huong', label: 'Điều hướng người dùng' },
+  { to: '/operator/lich-sac', label: 'Lập lịch sạc ưu tiên' },
+  { to: '/operator/mo-phong', label: 'Mô phỏng kịch bản' },
+];
+
+const navByRole = { student: studentNav, operator: operatorNav };
+
+/** Khung ứng dụng sau đăng nhập: sidebar tối cố định + vùng nội dung sáng. */
 export function AppShell() {
   const navigate = useNavigate();
-  const { modal } = AntApp.useApp();
   const user = useAuthStore((state) => state.currentUser);
-  const logout = useAuthStore((state) => state.logout);
-  const reset = useAppStore((state) => state.reset);
-  const [dark, setDark] = useState(() => localStorage.getItem('demo-theme') === 'dark');
+  const dark = useUiStore((state) => state.dark);
+  const { message } = AntApp.useApp();
+  // Xử lý nền cho lịch sạc: hết hạn giữ chỗ, sạc đầy, nhường cổng cho lịch kế tiếp.
+  useChargingTicker();
+  // Đồng bộ dữ liệu khi mở trang sinh viên và nhà điều hành ở hai tab khác nhau.
+  useCrossTabSync();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('demo-theme', dark ? 'dark' : 'light');
   }, [dark]);
 
   if (!user) return <Navigate to="/login" replace />;
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-
-  const visibleLinks = links.filter((link) => link.roles.includes(user.role));
+  const items = navByRole[user.role];
+  const settingsPath = user.role === 'operator' ? '/operator/cai-dat' : '/student/cai-dat';
 
   return (
     <ConfigProvider
       theme={{
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: { colorPrimary: '#2563eb', borderRadius: 10 },
+        token: { colorPrimary: '#176B5B', borderRadius: 10 },
       }}
     >
-      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 dark:border-slate-700 dark:bg-slate-900/95">
-            <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
-              <NavLink to={homeFor(user.role)} className="mr-auto flex items-center gap-2 font-bold">
-                <Zap className="text-blue-600" /> Smart E-Mobility Hub
-                <span className="rounded bg-blue-100 px-2 py-1 text-xs font-normal text-blue-700">
-                  MVP DEMO
-                </span>
-              </NavLink>
+      <div className="min-h-screen bg-surface text-ink dark:bg-slate-950 dark:text-slate-100">
+        <aside className="fixed inset-y-0 left-0 z-20 flex w-[250px] flex-col overflow-y-auto bg-[#102A43] px-8 py-6">
+          <NavLink to={homeFor(user.role)} className="px-1">
+            <p className="text-2xl font-bold tracking-tight text-white">SEMH</p>
+            <p className="text-[11px] text-[#AFC1D4]">Mobility Management</p>
+          </NavLink>
 
-              <nav className="flex gap-2">
-                {visibleLinks.map(({ to, label, icon: Icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    className={({ isActive }) =>
-                      `flex items-center gap-1 rounded-lg px-3 py-2 text-sm ${
-                        isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`
-                    }
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </NavLink>
-                ))}
-              </nav>
+          <div className="mt-6 rounded-lg bg-[#1A3A55] py-2.5 text-center text-sm font-medium text-white">
+            {user.role === 'operator' ? 'Đơn vị vận hành' : roleLabel[user.role]}
+          </div>
 
-              <span className="hidden items-center gap-2 text-sm text-slate-600 dark:text-slate-300 sm:flex">
-                <UserRound size={16} />
-                {user.fullName}
-                <Tag className="mr-0">{roleLabel[user.role]}</Tag>
-              </span>
-
-              <Button
-                icon={dark ? <Sun size={16} /> : <Moon size={16} />}
-                onClick={() => setDark((value) => !value)}
-              >
-                {dark ? 'Sáng' : 'Tối'}
-              </Button>
-              <Button
-                icon={<RotateCcw size={16} />}
-                onClick={() =>
-                  modal.confirm({
-                    title: 'Khôi phục dữ liệu demo?',
-                    content: 'Mọi thay đổi đã lưu trong trình duyệt sẽ bị xóa.',
-                    okText: 'Khôi phục',
-                    cancelText: 'Hủy',
-                    onOk: reset,
-                  })
+          <nav className="mt-12 flex flex-col gap-1">
+            {items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-3 text-[14px] transition ${
+                    isActive
+                      ? 'bg-[#176B5B] font-medium text-white'
+                      : 'text-[#D4DFE9] hover:bg-white/5'
+                  }`
                 }
               >
-                Reset
-              </Button>
-              <Button icon={<LogOut size={16} />} onClick={handleLogout}>
-                Đăng xuất
-              </Button>
-            </div>
-          </header>
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
 
-          <main className="mx-auto max-w-7xl p-4 md:p-7">
-            <Outlet />
-          </main>
+          <div className="mt-auto space-y-1 border-t border-white/10 pt-4">
+            <button
+              type="button"
+              onClick={() => navigate(settingsPath)}
+              className="w-full rounded-lg px-1 py-2.5 text-left text-sm text-[#AFC1D4] transition hover:bg-white/5"
+            >
+              Cài đặt hệ thống
+            </button>
+            <button
+              type="button"
+              onClick={() => message.info('Chưa hỗ trợ trong bản demo.')}
+              className="w-full rounded-lg px-1 py-2.5 text-left text-sm text-[#AFC1D4] transition hover:bg-white/5"
+            >
+              Trợ giúp
+            </button>
+          </div>
+        </aside>
 
-          <footer className="py-6 text-center text-xs text-slate-400">
-            Frontend-only prototype · dữ liệu giả lập · không kết nối thiết bị IoT
-          </footer>
+        <div className="ml-[250px] min-h-screen p-6 xl:p-8">
+          <Outlet />
         </div>
+        {/* Đề xuất điều hướng sang Hub thay thế (chỉ hiện với sinh viên) */}
+        {user.role === 'student' && <RedirectNotifier />}
+      </div>
     </ConfigProvider>
   );
 }
