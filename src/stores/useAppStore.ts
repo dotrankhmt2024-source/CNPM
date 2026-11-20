@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppData, Booking, HubStatus, ParkingReservation } from '../types/domain';
+import type { AppData, Booking, ChargingReservation, HubStatus, ParkingReservation } from '../types/domain';
 import { createInitialData, initialData } from '../mocks/seed';
 import { createChargingActions, type ChargingActions } from './slices/chargingSlice';
 import { createDispatchActions, type DispatchActions } from './slices/dispatchSlice';
@@ -24,6 +24,14 @@ type Store = AppData &
     startTime: string;
     endTime: string;
   }) => Result & { reservation?: ParkingReservation };
+  bookCharging: (input: {
+    hubId: string;
+    portCode: string;
+    date: string;
+    startTime: string;
+    durationMinutes: number;
+    power: number;
+  }) => Result & { reservation?: ChargingReservation };
   updateHubStatus: (hubId: string, status: HubStatus) => void;
   resolveIncident: (id: string) => void;
 };
@@ -195,7 +203,38 @@ export const useAppStore = create<Store>()(
         return { ok: true, message: 'Đặt chỗ đỗ thành công', reservation };
       },
 
-      // Sạc (đặt lịch theo khung giờ, lập lịch ưu tiên, phiên sạc) và điều phối xe:
+      bookCharging: ({ hubId, portCode, date, startTime, durationMinutes, power }) => {
+        const state = get();
+        const port = state.chargingPorts.find(
+          (item) => item.hubId === hubId && item.code === portCode,
+        );
+        if (!port || port.status !== 'free') {
+          return { ok: false, message: 'Cổng sạc này không còn trống.' };
+        }
+
+        const reservation: ChargingReservation = {
+          id: uid(),
+          hubId,
+          portCode,
+          date,
+          startTime,
+          durationMinutes,
+          power,
+          price: power >= 120 ? 90000 : 50000,
+          code: `SAC${Math.floor(100000 + Math.random() * 900000)}`,
+          status: 'reserved',
+        };
+
+        set({
+          chargingPorts: state.chargingPorts.map((item) =>
+            item.id === port.id ? { ...item, status: 'reserved' } : item,
+          ),
+          chargingReservations: [reservation, ...state.chargingReservations],
+        });
+        return { ok: true, message: 'Đặt chỗ sạc thành công', reservation };
+      },
+
+      // Lập lịch sạc ưu tiên, phiên sạc (nhà điều hành) và điều phối xe:
       // xem stores/slices/chargingSlice.ts, stores/slices/dispatchSlice.ts
       ...createChargingActions(set, get),
       ...createDispatchActions(set, get),
@@ -212,6 +251,6 @@ export const useAppStore = create<Store>()(
           ),
         })),
     }),
-    { name: 'smart-emobility-demo-v5' },
+    { name: 'smart-emobility-demo-v6' },
   ),
 );

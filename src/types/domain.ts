@@ -1,10 +1,9 @@
 import type {
+  ChargePoint,
+  ChargingBooking,
   ChargingConfig,
-  ChargingPort,
   ChargingRequest,
-  ChargingReservation,
   ChargingSession,
-  PersonalVehicle,
 } from './charging';
 import type { DispatchOrder, DispatchStaff } from './dispatch';
 
@@ -67,7 +66,31 @@ export interface ParkingReservation {
   status: 'reserved' | 'cancelled';
 }
 
-/* ---------- Sạc & điều phối: xem src/types/charging.ts, src/types/dispatch.ts ---------- */
+/* ---------- Đặt lịch sạc ---------- */
+export type ChargingPortStatus = 'free' | 'used' | 'reserved';
+
+export interface ChargingPort {
+  id: string;
+  code: string;
+  hubId: string;
+  power: number;
+  status: ChargingPortStatus;
+}
+
+export interface ChargingReservation {
+  id: string;
+  hubId: string;
+  portCode: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  power: number;
+  price: number;
+  code: string;
+  status: 'reserved' | 'cancelled';
+}
+
+/* ---------- Lập lịch sạc ưu tiên & điều phối (nhà điều hành): src/types/charging.ts, src/types/dispatch.ts ---------- */
 
 export interface AppData {
   hubs: Hub[];
@@ -79,9 +102,11 @@ export interface AppData {
   parkingReservations: ParkingReservation[];
   chargingPorts: ChargingPort[];
   chargingReservations: ChargingReservation[];
+  /** Cổng sạc và lịch sạc theo khung giờ dùng cho lập lịch sạc ưu tiên của nhà điều hành. */
+  chargePoints: ChargePoint[];
+  chargingBookings: ChargingBooking[];
   chargingSessions: ChargingSession[];
   chargingConfig: ChargingConfig;
-  personalVehicles: PersonalVehicle[];
   dispatchOrders: DispatchOrder[];
   dispatchStaff: DispatchStaff[];
   /** Độ lệch đồng hồ mô phỏng (phút) — dùng để "tua nhanh" thời gian khi demo. */

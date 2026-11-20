@@ -9,7 +9,7 @@ import { useSimNow } from '../../hooks/useSimulationClock';
 import { useAppStore } from '../../stores/useAppStore';
 import { pickChargingState, prioritizeVehicles, sessionBatteryAt } from '../../services/chargingScheduler';
 import { formatDateTime, formatHm, formatMoney, toDateKey } from '../../services/clock';
-import type { ChargingReservation, ChargingSession } from '../../types/domain';
+import type { ChargingBooking, ChargingSession } from '../../types/domain';
 import {
   END_REASON_LABEL,
   PORT_STATUS_LABEL,
@@ -26,7 +26,7 @@ export function ChargingSchedulePage() {
   const { message, modal } = AntApp.useApp();
   const [params, setParams] = useSearchParams();
   const data = useAppStore();
-  const { hubs, chargingPorts, chargingReservations, chargingSessions, chargingConfig } = data;
+  const { hubs, chargePoints, chargingBookings, chargingSessions, chargingConfig } = data;
   const createSmartChargingSchedule = useAppStore((state) => state.createSmartChargingSchedule);
   const completeChargingSession = useAppStore((state) => state.completeChargingSession);
   const setPortMaintenance = useAppStore((state) => state.setPortMaintenance);
@@ -44,14 +44,14 @@ export function ChargingSchedulePage() {
 
   if (!hub) return null;
 
-  const hubPorts = chargingPorts.filter((port) => port.hubId === hub.id);
+  const hubPorts = chargePoints.filter((port) => port.hubId === hub.id);
   const activePort = hubPorts.find((port) => port.id === selectedPortId) ?? hubPorts[0] ?? null;
   const liveSessions = chargingSessions.filter(
     (session) => session.hubId === hub.id && (session.status === 'CHARGING' || session.status === 'FULL'),
   );
   const queueCount = prioritizeVehicles(chargingState, hub.id, now).filter((item) => item.eligible).length;
   const todayKey = toDateKey(now);
-  const todaysReservations = chargingReservations.filter(
+  const todaysReservations = chargingBookings.filter(
     (item) => item.hubId === hub.id && item.date === todayKey && item.status !== 'CANCELLED',
   );
 
@@ -88,9 +88,9 @@ export function ChargingSchedulePage() {
             label: session.vehicleLabel,
             battery: Math.round(sessionBatteryAt(session, now)),
             tag: session.status === 'COMPLETED' ? 'Đã sạc' : session.status === 'FULL' ? 'Đã đầy' : 'Đang sạc',
-            reservation: undefined as ChargingReservation | undefined,
+            reservation: undefined as ChargingBooking | undefined,
           })),
-        ...chargingReservations
+        ...chargingBookings
           .filter(
             (item) => item.portId === activePort.id && item.status === 'CONFIRMED',
           )
@@ -105,7 +105,7 @@ export function ChargingSchedulePage() {
       ].sort((a, b) => a.time - b.time)
     : [];
   /** Lịch đang trong khung check-in (trước giờ bắt đầu ít phút đến hết thời gian giữ chỗ). */
-  const canCheckIn = (reservation: ChargingReservation) => {
+  const canCheckIn = (reservation: ChargingBooking) => {
     const start = Date.parse(reservation.startAt);
     return (
       now >= start - chargingConfig.earlyCheckInMinutes * 60000 && now < start + chargingConfig.holdMinutes * 60000
@@ -341,7 +341,7 @@ export function ChargingSchedulePage() {
                     <TimelineLegend />
                     <ChargingTimeline
                       ports={hubPorts}
-                      reservations={chargingReservations.filter((item) => item.hubId === hub.id)}
+                      reservations={chargingBookings.filter((item) => item.hubId === hub.id)}
                       sessions={chargingSessions.filter((item) => item.hubId === hub.id)}
                       dateKey={timelineDate}
                       openHour={chargingConfig.openHour}
@@ -355,7 +355,7 @@ export function ChargingSchedulePage() {
                         size="small"
                         rowKey="id"
                         pagination={{ pageSize: 6, hideOnSinglePage: true }}
-                        dataSource={chargingReservations
+                        dataSource={chargingBookings
                           .filter((item) => item.hubId === hub.id && item.date === timelineDate)
                           .sort((a, b) => a.startAt.localeCompare(b.startAt))}
                         locale={{ emptyText: <Empty description="Không có lịch đặt trong ngày." /> }}
@@ -441,7 +441,7 @@ export function ChargingSchedulePage() {
         <h3 className="text-[19px] font-bold text-ink dark:text-slate-100">Chọn Hub khác</h3>
         <div className="mt-4 space-y-2">
           {hubs.map((item) => {
-            const ports = chargingPorts.filter((port) => port.hubId === item.id);
+            const ports = chargePoints.filter((port) => port.hubId === item.id);
             return (
               <button
                 key={item.id}

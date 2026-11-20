@@ -62,14 +62,15 @@ Logic nghiệp vụ viết dạng hàm thuần, có unit test, bám theo Class d
 | `src/services/chargingScheduler.ts` | Lịch sạc theo khung giờ, điểm ưu tiên, hàng đợi ưu tiên, overflow, phiên sạc |
 | `src/services/dispatchService.ts` | Vòng đời lệnh điều phối, sức chứa Hub đích, ETA, gợi ý cân bằng xe |
 | `src/stores/slices/chargingSlice.ts`, `dispatchSlice.ts` | Nối service vào `useAppStore` |
-| `src/types/charging.ts`, `src/types/dispatch.ts` | Mô hình dữ liệu |
+| `src/types/charging.ts`, `src/types/dispatch.ts` | Mô hình dữ liệu (phía nhà điều hành) |
 | `src/services/__tests__/*` | Test case 4.7, 4.8, 4.13–4.16 và các trường hợp biên (`npm test`) |
 
 **Lịch sạc theo khung giờ** (`/operator/lich-sac`, tab "Lịch theo khung giờ"): sơ đồ theo cổng × khung
 30 phút trong ngày gồm lịch đặt, phiên đang sạc / đã đầy / đã xong, bỏ chỗ. Service chặn trùng lịch theo cổng
 và theo xe, kiểm tra đầu nối AC/DC; lịch không check-in trong thời gian giữ chỗ tự hủy (bỏ chỗ) và giải phóng
-cổng. Nhà điều hành xác nhận check-in tại cổng trong "Lịch sạc chi tiết". Trang Đặt lịch sạc của sinh viên
-(`/student/dat-sac`) giữ nguyên bản `do-dev`, đặt lịch qua `bookCharging` và dùng chung dữ liệu này.
+cổng. Nhà điều hành xác nhận check-in tại cổng trong "Lịch sạc chi tiết".
+Phần này dùng dữ liệu riêng (`chargePoints`, `chargingBookings`, `chargingSessions`); trang Đặt lịch sạc của
+sinh viên (`chargingPorts`, `chargingReservations`, `bookCharging`) giữ nguyên bản `do-dev`.
 
 **Bộ lập lịch ưu tiên** (`/operator/lich-sac`): điểm = (100 − pin) × 0,6 + 15 (pin ≤ ngưỡng nguy cấp)
 + tối đa 25 (sắp có chuyến đi trong cửa sổ thời gian) + 10 (xe dùng chung) + tối đa 10 (thời gian chờ).

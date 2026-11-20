@@ -1,6 +1,6 @@
 /* ============================================================
  * Mô hình dữ liệu cho phân hệ SẠC:
- *  - Đặt lịch sạc theo khung giờ (ChargingReservation)
+ *  - Đặt lịch sạc theo khung giờ (ChargingBooking)
  *  - Lập lịch sạc thông minh ưu tiên (ChargingRequest = phần tử hàng đợi ưu tiên)
  *  - Phiên sạc (ChargingSession) và hoàn tất phiên sạc
  * Tên lớp/thuộc tính bám theo Class diagram mục 3.4, 3.5 trong báo cáo nhóm.
@@ -19,9 +19,9 @@ export type ConnectorType = 'AC' | 'DC';
  *  - maintenance: bảo trì / báo lỗi
  * Giá trị này được hệ thống tự tính lại (syncChargingState) — không sửa tay.
  */
-export type ChargingPortStatus = 'free' | 'reserved' | 'used' | 'full' | 'maintenance';
+export type ChargePointStatus = 'free' | 'reserved' | 'used' | 'full' | 'maintenance';
 
-export interface ChargingPort {
+export interface ChargePoint {
   id: string;
   /** Mã cổng hiển thị, ví dụ CS-01. */
   code: string;
@@ -32,33 +32,22 @@ export interface ChargingPort {
   zone: string;
   /** Cổng đang bảo trì (do Operator bật/tắt). */
   underMaintenance: boolean;
-  status: ChargingPortStatus;
+  status: ChargePointStatus;
 }
 
 /** Loại phương tiện tham gia sạc. */
 export type ChargeVehicleKind = 'shared' | 'personal';
 export type PersonalVehicleType = 'bike' | 'motorbike' | 'car';
 
-/** Xe cá nhân của sinh viên (class PersonalVehicle). */
-export interface PersonalVehicle {
-  id: string;
-  ownerId: string;
-  licensePlate: string;
-  model: string;
-  type: PersonalVehicleType;
-  /** Dung lượng pin (kWh). */
-  batteryCapacityKwh: number;
-}
-
 /** Trạng thái lịch đặt sạc (state-chart 4.3 — phiên giữ chỗ). */
-export type ChargingReservationStatus =
+export type ChargingBookingStatus =
   | 'CONFIRMED' // Khởi tạo: đã giữ khung giờ, chờ check-in
   | 'CHECKED_IN' // Đang hiệu lực: đã check-in, phiên sạc đang chạy
   | 'COMPLETED' // Kết thúc
   | 'CANCELLED' // Sinh viên hủy
   | 'EXPIRED'; // Quá thời gian giữ chỗ mà không check-in (bỏ chỗ)
 
-export interface ChargingReservation {
+export interface ChargingBooking {
   id: string;
   /** Mã xác nhận / mã check-in (QR). */
   code: string;
@@ -68,7 +57,7 @@ export interface ChargingReservation {
   portId: string;
   portCode: string;
   vehicleKind: ChargeVehicleKind;
-  /** Xe dùng chung: id trong bảng vehicles; xe cá nhân: id PersonalVehicle. */
+  /** Xe dùng chung: id trong bảng vehicles; xe cá nhân: biển số / mã xe. */
   vehicleId: string;
   vehicleLabel: string;
   batteryCapacityKwh: number;
@@ -86,7 +75,7 @@ export interface ChargingReservation {
   /** Phí dự kiến khi đặt. */
   price: number;
   priorityScore: number;
-  status: ChargingReservationStatus;
+  status: ChargingBookingStatus;
   createdAt: string;
   checkedInAt?: string;
   cancelledAt?: string;

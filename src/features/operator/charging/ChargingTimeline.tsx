@@ -1,11 +1,11 @@
 import { Tooltip } from 'antd';
-import type { ChargingPort, ChargingReservation, ChargingSession } from '../../../types/domain';
+import type { ChargePoint, ChargingBooking, ChargingSession } from '../../../types/domain';
 import { MINUTE, atLocalTime, formatHm } from '../../../services/clock';
 import { sessionBatteryAt } from '../../../services/chargingScheduler';
 
 interface Props {
-  ports: ChargingPort[];
-  reservations: ChargingReservation[];
+  ports: ChargePoint[];
+  reservations: ChargingBooking[];
   sessions: ChargingSession[];
   dateKey: string;
   openHour: number;
@@ -35,7 +35,7 @@ export function ChargingTimeline({ ports, reservations, sessions, dateKey, openH
   const nowVisible = now >= dayStart && now <= dayEnd;
 
   type Bar = { key: string; start: number; end: number; style: keyof typeof BAR_STYLE; title: string; detail: string };
-  const barsFor = (port: ChargingPort): Bar[] => {
+  const barsFor = (port: ChargePoint): Bar[] => {
     const bars: Bar[] = [];
     reservations
       .filter((item) => item.portId === port.id && (item.status === 'CONFIRMED' || item.status === 'EXPIRED'))

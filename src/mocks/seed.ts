@@ -1,14 +1,14 @@
 import type {
   AppData,
+  ChargePoint,
   ChargingPort,
   ChargingRequest,
-  ChargingReservation,
+  ChargingBooking,
   ChargingSession,
   DispatchOrder,
   DispatchStaff,
   Hub,
   ParkingSlot,
-  PersonalVehicle,
   Vehicle,
 } from '../types/domain';
 import { DEFAULT_CHARGING_CONFIG, estimateCharge, estimatePrice, syncChargingState } from '../services/chargingScheduler';
@@ -52,12 +52,34 @@ const buildParkingSlots = (): ParkingSlot[] =>
     }),
   );
 
+/* ---------- Trang Đặt lịch sạc của sinh viên (giữ nguyên bản do-dev) ---------- */
+
+/** Mỗi Hub 8 cổng sạc: CS-01..CS-04 là AC 60kW, CS-05..CS-08 là AC 120kW. */
+const buildChargingPorts = (): ChargingPort[] =>
+  hubs.flatMap((hub, hubIndex) =>
+    Array.from({ length: 8 }, (_, index) => {
+      const seed = (index + hubIndex * 3) % 9;
+      const status =
+        seed === 2 || seed === 7 ? 'reserved' : seed === 4 ? 'used' : 'free';
+
+      return {
+        id: `${hub.id}-port-${index + 1}`,
+        code: `CS-${String(index + 1).padStart(2, '0')}`,
+        hubId: hub.id,
+        power: index < 4 ? 60 : 120,
+        status,
+      } as ChargingPort;
+    }),
+  );
+
+/* ---------- Lập lịch sạc ưu tiên của nhà điều hành ---------- */
+
 /**
  * Cổng sạc: số cổng mỗi Hub = hub.chargers. Nửa đầu AC 60kW, nửa sau AC 120kW
  * (theo mockup), riêng cổng cuối của HUB A4 và B1 là DC 120kW cho ô tô.
  * Trạng thái (status) được tính lại bởi syncChargingState.
  */
-const buildChargingPorts = (): ChargingPort[] =>
+const buildChargePoints = (): ChargePoint[] =>
   hubs.flatMap((hub) =>
     Array.from({ length: hub.chargers }, (_, index) => {
       const isDc = (hub.id === 'h1' || hub.id === 'h2') && index === hub.chargers - 1;
@@ -70,7 +92,7 @@ const buildChargingPorts = (): ChargingPort[] =>
         zone: 'Khu A · Tầng 1',
         underMaintenance: false,
         status: 'free',
-      } satisfies ChargingPort;
+      } satisfies ChargePoint;
     }),
   );
 
@@ -96,11 +118,6 @@ const baseVehicles: Vehicle[] = [
   { id: 'v17', code: 'EV-072', model: 'VinFast Evo', hubId: 'h2', battery: 83, status: 'in_transit', type: 'motorbike' },
 ];
 
-const personalVehicles: PersonalVehicle[] = [
-  { id: 'pv1', ownerId: 'student-206', licensePlate: '51K-888.88', model: 'VinFast VF 8', type: 'car', batteryCapacityKwh: 82 },
-  { id: 'pv2', ownerId: 'student-206', licensePlate: '59X1-246.80', model: 'VinFast Klara S', type: 'motorbike', batteryCapacityKwh: 3.5 },
-];
-
 const dispatchStaff: DispatchStaff[] = [
   { id: 'st1', name: 'Nguyễn Văn Hùng', phone: '0901 234 567' },
   { id: 'st2', name: 'Trần Quốc Bảo', phone: '0902 345 678' },
@@ -112,7 +129,7 @@ export function createInitialData(now = Date.now()): AppData {
   const iso = (time: number) => new Date(time).toISOString();
   const ago = (minutes: number) => now - minutes * MINUTE;
   const config = { ...DEFAULT_CHARGING_CONFIG, updatedAt: iso(now) };
-  const ports = buildChargingPorts();
+  const ports = buildChargePoints();
   const portOf = (hubId: string, code: string) => ports.find((port) => port.hubId === hubId && port.code === code)!;
 
   /** Khung giờ (bội số 30 phút) cách hiện tại ít nhất `minutes`, nằm trong giờ mở cửa. */
@@ -144,8 +161,8 @@ export function createInitialData(now = Date.now()): AppData {
     current: number;
     target: number;
     start: number;
-    status?: ChargingReservation['status'];
-  }): ChargingReservation => {
+    status?: ChargingBooking['status'];
+  }): ChargingBooking => {
     const port = portOf(input.hubId, input.portCode);
     const estimate = estimateCharge({
       capacityKwh: input.capacity,
@@ -184,7 +201,7 @@ export function createInitialData(now = Date.now()): AppData {
   };
 
   const yesterday = ago(24 * 60);
-  const chargingReservations: ChargingReservation[] = [
+  const chargingBookings: ChargingBooking[] = [
     // Lịch bắt đầu sau 5 phút → nhà điều hành có thể xác nhận check-in ngay (mã cố định để demo).
     makeReservation({
       id: 'rsv-demo-1', code: 'SAC246810', studentId: 'student-206', studentName: 'Trần Minh Quân',
@@ -275,7 +292,7 @@ export function createInitialData(now = Date.now()): AppData {
     const powerKw = Math.min(port.power, input.maxPower);
     const minutes = ((input.capacity * (input.to - input.from)) / 100 / powerKw) * 60;
     // Phải trả cổng trước lịch đặt kế tiếp trên cùng cổng (nếu có).
-    const nextBooking = chargingReservations
+    const nextBooking = chargingBookings
       .filter((item) => item.portId === port.id && item.status === 'CONFIRMED' && Date.parse(item.startAt) > input.start)
       .map((item) => Date.parse(item.startAt));
     const mustEndBy = Math.min(input.start + config.maxSessionMinutes * MINUTE, ...nextBooking);
@@ -445,11 +462,12 @@ export function createInitialData(now = Date.now()): AppData {
     incidents: [{ id: 'i1', hubId: 'h4', message: 'Xe EV-052 cần kiểm tra kỹ thuật', resolved: false }],
     parkingSlots: buildParkingSlots(),
     parkingReservations: [],
-    chargingPorts: ports,
-    chargingReservations,
+    chargingPorts: buildChargingPorts(),
+    chargingReservations: [],
+    chargePoints: ports,
+    chargingBookings,
     chargingSessions,
     chargingConfig: config,
-    personalVehicles,
     dispatchOrders,
     dispatchStaff,
     clockOffsetMinutes: 0,

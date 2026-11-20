@@ -86,7 +86,7 @@ describe('Test case 4.13 — Ưu tiên xe pin thấp và cấp điện (HUB C2)'
     const next = result.state;
     result.allocated.forEach(({ session }) => {
       expect(session.status).toBe('CHARGING');
-      expect(next.chargingPorts.find((port) => port.id === session.portId)?.status).toBe('used');
+      expect(next.chargePoints.find((port) => port.id === session.portId)?.status).toBe('used');
       expect(next.vehicles.find((vehicle) => vehicle.id === session.vehicleId)?.status).toBe('charging');
     });
     expect(next.hubs.find((hub) => hub.id === 'h3')?.activeCharging).toBe(4);
@@ -211,13 +211,13 @@ describe('Check-in, quá hạn giữ chỗ và hoàn tất phiên sạc', () => 
     const checkedIn = validateCheckIn(state, { code: reservation.code }, checkInAt);
     expect(checkedIn.ok).toBe(true);
     if (!checkedIn.ok) return;
-    expect(checkedIn.state.chargingReservations.find((item) => item.id === reservation.id)?.status).toBe('CHECKED_IN');
-    expect(checkedIn.state.chargingPorts.find((port) => port.id === reservation.portId)?.status).toBe('used');
+    expect(checkedIn.state.chargingBookings.find((item) => item.id === reservation.id)?.status).toBe('CHECKED_IN');
+    expect(checkedIn.state.chargePoints.find((port) => port.id === reservation.portId)?.status).toBe('used');
 
     const fullAt = Date.parse(checkedIn.session.expectedFullAt);
     const ticked = runChargingTick(checkedIn.state, fullAt + MINUTE);
     expect(ticked.state.chargingSessions.find((item) => item.id === checkedIn.session.id)?.status).toBe('FULL');
-    expect(ticked.state.chargingPorts.find((port) => port.id === reservation.portId)?.status).toBe('full');
+    expect(ticked.state.chargePoints.find((port) => port.id === reservation.portId)?.status).toBe('full');
 
     const done = completeChargingSession(ticked.state, checkedIn.session.id, 'user_stop', fullAt + 2 * MINUTE);
     expect(done.ok).toBe(true);
@@ -226,7 +226,7 @@ describe('Check-in, quá hạn giữ chỗ và hoàn tất phiên sạc', () => 
     expect(done.session.endBattery).toBe(85);
     expect(done.session.energyKwh).toBeCloseTo((3.5 * (85 - 18)) / 100, 2);
     expect(done.session.cost).toBeGreaterThan(0);
-    expect(done.state.chargingReservations.find((item) => item.id === reservation.id)?.status).toBe('COMPLETED');
+    expect(done.state.chargingBookings.find((item) => item.id === reservation.id)?.status).toBe('COMPLETED');
     // Cổng được giải phóng và (do bật tự động cấp điện) chuyển ngay cho xe đang chờ của HUB C2
     const nextOnPort = done.state.chargingSessions.find(
       (item) => item.portId === reservation.portId && item.status === 'CHARGING',
@@ -243,7 +243,7 @@ describe('Check-in, quá hạn giữ chỗ và hoàn tất phiên sạc', () => 
     if (!checkedIn.ok) throw new Error(checkedIn.message);
     const done = completeChargingSession(checkedIn.state, checkedIn.session.id, 'user_stop', atLocalTime('2026-11-20', '09:50'));
     if (!done.ok) throw new Error(done.message);
-    expect(done.state.chargingPorts.find((port) => port.id === base.reservation.portId)?.status).toBe('free');
+    expect(done.state.chargePoints.find((port) => port.id === base.reservation.portId)?.status).toBe('free');
   });
 
   it('dừng sạc sớm chỉ tính lượng điện đã sạc', () => {
@@ -262,7 +262,7 @@ describe('Check-in, quá hạn giữ chỗ và hoàn tất phiên sạc', () => 
     const { state, reservation } = booked();
     const ticked = runChargingTick(state, atLocalTime('2026-11-20', '09:41'));
     expect(ticked.changed).toBe(true);
-    expect(ticked.state.chargingReservations.find((item) => item.id === reservation.id)?.status).toBe('EXPIRED');
+    expect(ticked.state.chargingBookings.find((item) => item.id === reservation.id)?.status).toBe('EXPIRED');
     expect(validateCheckIn(ticked.state, { code: reservation.code }, atLocalTime('2026-11-20', '09:42')).ok).toBe(false);
   });
 });
@@ -304,7 +304,7 @@ describe('Phối hợp lịch đặt và hàng đợi ưu tiên', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.moved).toBe(1);
-    const moved = result.state.chargingReservations.find((item) => item.id === booked.reservation.id);
+    const moved = result.state.chargingBookings.find((item) => item.id === booked.reservation.id);
     expect(moved?.status).toBe('CONFIRMED');
     expect(moved?.portId).not.toBe('h3-port-3');
   });

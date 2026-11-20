@@ -3,7 +3,7 @@
  * services/chargingScheduler.ts; slice này chỉ lấy thời gian mô phỏng, gọi service
  * và ghi state mới vào store.
  */
-import type { AppData, ChargingConfig, ChargingEndReason, ChargingReservation, PersonalVehicle } from '../../types/domain';
+import type { AppData, ChargingConfig, ChargingEndReason, ChargingBooking } from '../../types/domain';
 import {
   allocateChargingPower,
   cancelChargingRequest,
@@ -11,7 +11,6 @@ import {
   completeChargingSession,
   createChargingReservation,
   createSmartChargingSchedule,
-  makeId,
   pickChargingState,
   requestCharging,
   runChargingTick,
@@ -20,8 +19,7 @@ import {
   validateCheckIn,
   type ReservationInput,
 } from '../../services/chargingScheduler';
-import { simulatedNow, toDateKey } from '../../services/clock';
-import { useAuthStore } from '../useAuthStore';
+import { simulatedNow } from '../../services/clock';
 
 type Result = { ok: boolean; message: string };
 type Setter = (partial: Partial<AppData>) => void;
@@ -35,20 +33,7 @@ export interface ChargingActions {
   /** Xử lý định kỳ: lịch quá hạn, phiên phải nhường cổng, đồng bộ trạng thái cổng. */
   tickCharging: () => string[];
 
-  createChargingReservation: (input: ReservationInput) => Result & { reservation?: ChargingReservation };
-  /**
-   * Giao diện đặt lịch của trang Sinh viên (bản do-dev): đặt cổng `portCode` tại `hubId`
-   * lúc `startTime` hôm nay. Lịch được lưu chung với lịch sạc theo khung giờ nên
-   * hiển thị trên màn hình Lập lịch sạc ưu tiên của nhà điều hành.
-   */
-  bookCharging: (input: {
-    hubId: string;
-    portCode: string;
-    date: string;
-    startTime: string;
-    durationMinutes: number;
-    power: number;
-  }) => Result & { reservation?: ChargingReservation };
+  createChargingReservation: (input: ReservationInput) => Result & { reservation?: ChargingBooking };
   cancelChargingReservation: (reservationId: string) => Result;
   checkInCharging: (code: string, studentId?: string) => Result;
   completeChargingSession: (sessionId: string, reason?: ChargingEndReason) => Result;
@@ -63,7 +48,6 @@ export interface ChargingActions {
   setPortMaintenance: (portId: string, underMaintenance: boolean) => Result;
   updateChargingConfig: (patch: Partial<ChargingConfig>) => Result;
 
-  addPersonalVehicle: (vehicle: Omit<PersonalVehicle, 'id'>) => Result & { vehicle?: PersonalVehicle };
 }
 
 /** Kiểm tra tham số cấu hình sạc (ChargingParameterConfig.updateConfig). */
@@ -117,36 +101,6 @@ export const createChargingActions = (set: Setter, get: Getter): ChargingActions
       if (!result.ok) return result;
       set(result.state);
       return { ok: true, message: result.message, reservation: result.reservation };
-    },
-
-    bookCharging: ({ hubId, portCode, startTime, durationMinutes, power }) => {
-      const port = get().chargingPorts.find((item) => item.hubId === hubId && item.code === portCode);
-      if (!port) return { ok: false, message: 'Không tìm thấy cổng sạc.' };
-      const user = useAuthStore.getState().currentUser;
-      const result = createChargingReservation(
-        state(),
-        {
-          studentId: user?.id ?? 'student',
-          studentName: user?.fullName ?? 'Sinh viên',
-          hubId,
-          portId: port.id,
-          vehicleKind: 'personal',
-          vehicleId: `xe-${user?.id ?? 'sv'}`,
-          vehicleLabel: `Xe của ${user?.fullName ?? 'sinh viên'}`,
-          vehicleType: 'car',
-          batteryCapacityKwh: 60,
-          currentBattery: 20,
-          targetBattery: 80,
-          dateKey: toDateKey(now()),
-          startTime,
-          durationMinutes,
-          price: power >= 120 ? 90000 : 50000,
-        },
-        now(),
-      );
-      if (!result.ok) return result;
-      set(result.state);
-      return { ok: true, message: 'Đặt chỗ sạc thành công', reservation: result.reservation };
     },
 
     cancelChargingReservation: (reservationId) => {
@@ -231,20 +185,6 @@ export const createChargingActions = (set: Setter, get: Getter): ChargingActions
       if (error) return { ok: false, message: error };
       set({ chargingConfig: next });
       return { ok: true, message: 'Đã lưu tham số sạc.' };
-    },
-
-    addPersonalVehicle: (input) => {
-      const plate = input.licensePlate.trim().toUpperCase();
-      if (!plate || !input.model.trim()) return { ok: false, message: 'Vui lòng nhập biển số và tên xe.' };
-      if (get().personalVehicles.some((item) => item.licensePlate.toUpperCase() === plate)) {
-        return { ok: false, message: 'Biển số này đã được đăng ký.' };
-      }
-      if (!(input.batteryCapacityKwh > 0 && input.batteryCapacityKwh <= 200)) {
-        return { ok: false, message: 'Dung lượng pin không hợp lệ.' };
-      }
-      const vehicle: PersonalVehicle = { ...input, licensePlate: plate, model: input.model.trim(), id: makeId('pv') };
-      set({ personalVehicles: [...get().personalVehicles, vehicle] });
-      return { ok: true, message: 'Đã thêm xe cá nhân.', vehicle };
     },
   };
 };

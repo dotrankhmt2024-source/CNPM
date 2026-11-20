@@ -3,16 +3,16 @@ import type { ReactNode } from 'react';
 import { Progress, Tooltip } from 'antd';
 import type {
   ChargingEndReason,
-  ChargingPortStatus,
+  ChargePointStatus,
   ChargingRequestSource,
-  ChargingReservationStatus,
+  ChargingBookingStatus,
   ChargingSession,
 } from '../../types/domain';
 import type { PriorityBreakdown } from '../../services/chargingScheduler';
 import { sessionBatteryAt, sessionEnergyAt } from '../../services/chargingScheduler';
 import { formatDuration, formatHm, formatMoney, MINUTE } from '../../services/clock';
 
-export const PORT_STATUS_LABEL: Record<ChargingPortStatus | 'incompatible', string> = {
+export const PORT_STATUS_LABEL: Record<ChargePointStatus | 'incompatible', string> = {
   free: 'Trống',
   reserved: 'Đã đặt',
   used: 'Đang sạc',
@@ -21,7 +21,7 @@ export const PORT_STATUS_LABEL: Record<ChargingPortStatus | 'incompatible', stri
   incompatible: 'Không tương thích',
 };
 
-export const PORT_STATUS_STYLE: Record<ChargingPortStatus | 'incompatible', string> = {
+export const PORT_STATUS_STYLE: Record<ChargePointStatus | 'incompatible', string> = {
   free: 'border-[#176B5B] bg-[#EAF7EF] text-[#176B5B] dark:bg-emerald-500/10 dark:text-emerald-300',
   reserved: 'border-[#9DB8F5] bg-[#EEF4FF] text-[#2563EB] dark:bg-blue-500/10 dark:text-blue-300',
   used: 'border-[#E2BF8A] bg-[#FDF4E5] text-[#9A6B1F] dark:bg-amber-500/10 dark:text-amber-300',
@@ -30,7 +30,7 @@ export const PORT_STATUS_STYLE: Record<ChargingPortStatus | 'incompatible', stri
   incompatible: 'border-line bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900',
 };
 
-export const RESERVATION_STATUS: Record<ChargingReservationStatus, { label: string; className: string }> = {
+export const RESERVATION_STATUS: Record<ChargingBookingStatus, { label: string; className: string }> = {
   CONFIRMED: { label: 'Đã giữ chỗ', className: 'pill-blue' },
   CHECKED_IN: { label: 'Đang sạc', className: 'pill-orange' },
   COMPLETED: { label: 'Hoàn tất', className: 'pill-green' },

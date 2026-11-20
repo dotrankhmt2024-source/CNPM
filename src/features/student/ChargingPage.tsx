@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { App as AntApp, Button, Modal, Select } from 'antd';
 import { PageHeader } from '../../components/PageHeader';
 import { useAppStore } from '../../stores/useAppStore';
-import { useAuthStore } from '../../stores/useAuthStore';
 
 const timeSlots = ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
 
@@ -10,16 +9,12 @@ const statusLabel = {
   free: 'Trống',
   used: 'Đang dùng',
   reserved: 'Đã đặt',
-  full: 'Đang dùng',
-  maintenance: 'Bảo trì',
 } as const;
 
 const statusStyle = {
   free: 'border-[#176B5B] bg-[#EAF7EF] text-[#176B5B]',
   used: 'border-[#E2BF8A] bg-[#FDF4E5] text-[#9A6B1F]',
   reserved: 'border-[#9DB8F5] bg-[#EEF4FF] text-[#2563EB]',
-  full: 'border-[#E2BF8A] bg-[#FDF4E5] text-[#9A6B1F]',
-  maintenance: 'border-[#F5A3A3] bg-[#FDECEC] text-[#C0392B]',
 } as const;
 
 const formatDate = (date: Date) =>
@@ -35,8 +30,7 @@ export function ChargingPage() {
   const hubs = useAppStore((state) => state.hubs);
   const ports = useAppStore((state) => state.chargingPorts);
   const vehicles = useAppStore((state) => state.vehicles);
-  const studentId = useAuthStore((state) => state.currentUser?.id);
-  const reservations = useAppStore((state) => state.chargingReservations).filter((item) => item.studentId === studentId);
+  const reservations = useAppStore((state) => state.chargingReservations);
   const bookCharging = useAppStore((state) => state.bookCharging);
 
   const [hubId, setHubId] = useState(hubs[0]?.id ?? '');
@@ -55,7 +49,7 @@ export function ChargingPage() {
   const port = hubPorts.find((item) => item.code === selectedPort) ?? null;
   const vehicle = vehicles.find((item) => item.status === 'available') ?? vehicles[0] ?? null;
   const activeReservation =
-    reservations.find((item) => item.status === 'CONFIRMED' && item.hubId === hubId) ?? null;
+    reservations.find((item) => item.status === 'reserved' && item.hubId === hubId) ?? null;
 
   const handleConfirm = () => {
     if (!port) return;

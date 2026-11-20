@@ -18,14 +18,13 @@ import type {
   ChargeVehicleKind,
   ChargingConfig,
   ChargingEndReason,
-  ChargingPort,
-  ChargingPortStatus,
+  ChargePoint,
+  ChargePointStatus,
   ChargingRequest,
   ChargingRequestSource,
-  ChargingReservation,
+  ChargingBooking,
   ChargingSession,
   ConnectorType,
-  Hub,
   PersonalVehicleType,
   Vehicle,
 } from '../types/domain';
@@ -40,8 +39,8 @@ export type ChargingState = Pick<
   | 'hubs'
   | 'vehicles'
   | 'bookings'
-  | 'chargingPorts'
-  | 'chargingReservations'
+  | 'chargePoints'
+  | 'chargingBookings'
   | 'chargingSessions'
   | 'chargingRequests'
   | 'chargingConfig'
@@ -201,8 +200,8 @@ const overlaps = (aStart: number, aEnd: number, bStart: number, bEnd: number) =>
 
 /** Trạng thái của một cổng trong khoảng [start, end). */
 export function getPortStateInWindow(
-  state: Pick<ChargingState, 'chargingReservations' | 'chargingSessions'>,
-  port: ChargingPort,
+  state: Pick<ChargingState, 'chargingBookings' | 'chargingSessions'>,
+  port: ChargePoint,
   start: number,
   end: number,
   now: number,
@@ -216,7 +215,7 @@ export function getPortStateInWindow(
       overlaps(start, end, ms(session.startedAt), sessionBusyUntil(session, now)),
   );
   if (busySession) return 'used';
-  const busyReservation = state.chargingReservations.some(
+  const busyReservation = state.chargingBookings.some(
     (reservation) =>
       reservation.portId === port.id &&
       reservation.id !== excludeReservationId &&
@@ -231,77 +230,15 @@ export function getPortStateInWindow(
  * phù hợp đầu nối và không xung đột lịch.
  */
 export function checkChargerAvailability(
-  state: Pick<ChargingState, 'chargingPorts' | 'chargingReservations' | 'chargingSessions'>,
+  state: Pick<ChargingState, 'chargePoints' | 'chargingBookings' | 'chargingSessions'>,
   input: { hubId: string; start: number; end: number; connectors?: ConnectorType[]; now: number },
-): ChargingPort[] {
-  return state.chargingPorts.filter(
+): ChargePoint[] {
+  return state.chargePoints.filter(
     (port) =>
       port.hubId === input.hubId &&
       (!input.connectors || input.connectors.includes(port.connector)) &&
       getPortStateInWindow(state, port, input.start, input.end, input.now) === 'free',
   );
-}
-
-export interface SlotOption {
-  label: string;
-  start: number;
-  end: number;
-  /** Đã qua (không còn kịp check-in) hoặc vượt giờ đóng cửa. */
-  disabled: boolean;
-  freePorts: number;
-  totalPorts: number;
-}
-
-/** Danh sách khung giờ bắt đầu sạc trong ngày cùng số cổng còn trống của từng khung. */
-export function buildSlotOptions(
-  state: Pick<ChargingState, 'chargingPorts' | 'chargingReservations' | 'chargingSessions' | 'chargingConfig'>,
-  input: {
-    hubId: string;
-    dateKey: string;
-    durationMinutes: number;
-    connectors?: ConnectorType[];
-    now: number;
-  },
-): SlotOption[] {
-  const { slotMinutes, openHour, closeHour, holdMinutes } = state.chargingConfig;
-  const total = state.chargingPorts.filter(
-    (port) =>
-      port.hubId === input.hubId && (!input.connectors || input.connectors.includes(port.connector)),
-  ).length;
-  const options: SlotOption[] = [];
-  const dayClose = atLocalTime(input.dateKey, `${String(closeHour).padStart(2, '0')}:00`);
-  for (let minute = openHour * 60; minute + slotMinutes <= closeHour * 60; minute += slotMinutes) {
-    const label = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-    const start = atLocalTime(input.dateKey, label);
-    const end = start + input.durationMinutes * MINUTE;
-    const disabled = start + holdMinutes * MINUTE <= input.now || end > dayClose;
-    const freePorts = disabled
-      ? 0
-      : checkChargerAvailability(state, {
-          hubId: input.hubId,
-          start,
-          end,
-          connectors: input.connectors,
-          now: input.now,
-        }).length;
-    options.push({ label, start, end, disabled, freePorts, totalPorts: total });
-  }
-  return options;
-}
-
-/** Hub thay thế còn cổng trống trong cùng khung giờ (Extension 4.1 / 5.1). */
-export function findAlternativeHubs(
-  state: Pick<ChargingState, 'hubs' | 'chargingPorts' | 'chargingReservations' | 'chargingSessions'>,
-  input: { excludeHubId: string; start: number; end: number; connectors?: ConnectorType[]; now: number },
-): { hub: Hub; freePorts: number }[] {
-  return state.hubs
-    .filter((hub) => hub.id !== input.excludeHubId && hub.status !== 'maintenance')
-    .map((hub) => ({
-      hub,
-      freePorts: checkChargerAvailability(state, { ...input, hubId: hub.id }).length,
-    }))
-    .filter((item) => item.freePorts > 0)
-    .sort((a, b) => b.freePorts - a.freePorts);
 }
 
 /* ------------------------------------------------------------------ */
@@ -333,13 +270,13 @@ export function syncChargingState(state: ChargingState, now: number): ChargingSt
       : session,
   );
   const { earlyCheckInMinutes, holdMinutes } = state.chargingConfig;
-  const ports = state.chargingPorts.map((port) => {
-    let status: ChargingPortStatus = 'free';
+  const ports = state.chargePoints.map((port) => {
+    let status: ChargePointStatus = 'free';
     const live = sessions.find((session) => session.portId === port.id && isLiveSession(session));
     if (port.underMaintenance) status = 'maintenance';
     else if (live) status = live.status === 'FULL' ? 'full' : 'used';
     else if (
-      state.chargingReservations.some(
+      state.chargingBookings.some(
         (reservation) =>
           reservation.portId === port.id &&
           reservation.status === 'CONFIRMED' &&
@@ -358,7 +295,7 @@ export function syncChargingState(state: ChargingState, now: number): ChargingSt
       ? hub
       : { ...hub, chargers: hubPorts.length, activeCharging: active };
   });
-  return { ...state, chargingSessions: sessions, chargingPorts: ports, hubs };
+  return { ...state, chargingSessions: sessions, chargePoints: ports, hubs };
 }
 
 /* ------------------------------------------------------------------ */
@@ -392,12 +329,12 @@ export function createChargingReservation(
   state: ChargingState,
   input: ReservationInput,
   now: number,
-): OpResult<{ reservation: ChargingReservation }> {
+): OpResult<{ reservation: ChargingBooking }> {
   const config = state.chargingConfig;
   const hub = state.hubs.find((item) => item.id === input.hubId);
   if (!hub) return fail('Không tìm thấy Hub.');
   if (hub.status === 'maintenance') return fail('Hub đang tạm ngưng để bảo trì.');
-  const port = state.chargingPorts.find((item) => item.id === input.portId && item.hubId === hub.id);
+  const port = state.chargePoints.find((item) => item.id === input.portId && item.hubId === hub.id);
   if (!port) return fail('Không tìm thấy cổng sạc tại Hub này.');
   if (port.underMaintenance) return fail(`Cổng ${port.code} đang bảo trì, vui lòng chọn cổng khác.`);
   if (!isConnectorCompatible(input.vehicleType, port.connector)) {
@@ -446,7 +383,7 @@ export function createChargingReservation(
   if (portState !== 'free') {
     return fail(`Khung giờ đã đầy: cổng ${port.code} đã có lịch trong khoảng thời gian này.`);
   }
-  const vehicleClash = state.chargingReservations.some(
+  const vehicleClash = state.chargingBookings.some(
     (reservation) =>
       reservation.vehicleId === input.vehicleId &&
       (reservation.status === 'CONFIRMED' || reservation.status === 'CHECKED_IN') &&
@@ -462,7 +399,7 @@ export function createChargingReservation(
     config,
   });
 
-  const reservation: ChargingReservation = {
+  const reservation: ChargingBooking = {
     id: makeId('rsv'),
     code: makeCode('SAC'),
     studentId: input.studentId,
@@ -489,7 +426,7 @@ export function createChargingReservation(
     createdAt: iso(now),
   };
   const next = syncChargingState(
-    { ...state, chargingReservations: [reservation, ...state.chargingReservations] },
+    { ...state, chargingBookings: [reservation, ...state.chargingBookings] },
     now,
   );
   return { ok: true, message: 'Đặt lịch sạc thành công.', state: next, reservation };
@@ -501,13 +438,13 @@ export function cancelChargingReservation(
   reservationId: string,
   now: number,
 ): OpResult {
-  const reservation = state.chargingReservations.find((item) => item.id === reservationId);
+  const reservation = state.chargingBookings.find((item) => item.id === reservationId);
   if (!reservation) return fail('Không tìm thấy lịch sạc.');
   if (reservation.status !== 'CONFIRMED') return fail('Chỉ hủy được lịch sạc chưa check-in.');
   const next = syncChargingState(
     {
       ...state,
-      chargingReservations: state.chargingReservations.map((item) =>
+      chargingBookings: state.chargingBookings.map((item) =>
         item.id === reservationId ? { ...item, status: 'CANCELLED', cancelledAt: iso(now) } : item,
       ),
     },
@@ -519,8 +456,8 @@ export function cancelChargingReservation(
 /** processTimeoutReservations: quá thời gian giữ chỗ mà chưa check-in → EXPIRED (ghi nhận bỏ chỗ). */
 export function processTimeoutReservations(state: ChargingState, now: number) {
   const holdMs = state.chargingConfig.holdMinutes * MINUTE;
-  const expired: ChargingReservation[] = [];
-  const reservations = state.chargingReservations.map((reservation) => {
+  const expired: ChargingBooking[] = [];
+  const reservations = state.chargingBookings.map((reservation) => {
     if (reservation.status === 'CONFIRMED' && now >= ms(reservation.startAt) + holdMs) {
       const updated = {
         ...reservation,
@@ -533,12 +470,12 @@ export function processTimeoutReservations(state: ChargingState, now: number) {
     }
     return reservation;
   });
-  return { state: expired.length ? { ...state, chargingReservations: reservations } : state, expired };
+  return { state: expired.length ? { ...state, chargingBookings: reservations } : state, expired };
 }
 
 /** Lịch đặt CONFIRMED gần nhất trên cổng bắt đầu sau thời điểm `from`. */
 function nextReservationStart(state: ChargingState, portId: string, from: number, excludeId?: string) {
-  const starts = state.chargingReservations
+  const starts = state.chargingBookings
     .filter(
       (reservation) =>
         reservation.portId === portId &&
@@ -551,7 +488,7 @@ function nextReservationStart(state: ChargingState, portId: string, from: number
 }
 
 interface StartSessionInput {
-  port: ChargingPort;
+  port: ChargePoint;
   vehicleKind: ChargeVehicleKind;
   vehicleId: string;
   vehicleLabel: string;
@@ -602,7 +539,7 @@ export function validateCheckIn(
   now: number,
 ): OpResult<{ session: ChargingSession }> {
   const code = input.code.trim().toUpperCase();
-  const reservation = state.chargingReservations.find((item) => item.code === code);
+  const reservation = state.chargingBookings.find((item) => item.code === code);
   if (!reservation) return fail('Mã đặt lịch không tồn tại.');
   if (input.studentId && reservation.studentId !== input.studentId) {
     return fail('Mã đặt lịch không thuộc tài khoản của bạn.');
@@ -615,7 +552,7 @@ export function validateCheckIn(
     return fail(`Chưa đến giờ check-in. Bạn có thể check-in từ ${formatHm(start - config.earlyCheckInMinutes * MINUTE)}.`);
   }
   if (now >= start + config.holdMinutes * MINUTE) return fail('Đã quá thời gian giữ chỗ.');
-  const port = state.chargingPorts.find((item) => item.id === reservation.portId);
+  const port = state.chargePoints.find((item) => item.id === reservation.portId);
   if (!port) return fail('Không tìm thấy cổng sạc.');
   if (port.underMaintenance) return fail(`Cổng ${port.code} đang bảo trì. Vui lòng liên hệ đơn vị vận hành.`);
   const busy = state.chargingSessions.find((session) => session.portId === port.id && isLiveSession(session));
@@ -651,7 +588,7 @@ export function validateCheckIn(
     {
       ...state,
       chargingSessions: [session, ...state.chargingSessions],
-      chargingReservations: state.chargingReservations.map((item) =>
+      chargingBookings: state.chargingBookings.map((item) =>
         item.id === reservation.id
           ? { ...item, status: 'CHECKED_IN', checkedInAt: iso(now), sessionId: session.id }
           : item,
@@ -668,7 +605,7 @@ export function validateCheckIn(
 }
 
 /** Xe cá nhân: suy ra loại xe từ dung lượng pin đã lưu trong lịch. */
-function guessPersonalType(reservation: ChargingReservation): PersonalVehicleType {
+function guessPersonalType(reservation: ChargingBooking): PersonalVehicleType {
   if (reservation.batteryCapacityKwh >= 10) return 'car';
   if (reservation.batteryCapacityKwh >= 2) return 'motorbike';
   return 'bike';
@@ -679,7 +616,7 @@ function guessPersonalType(reservation: ChargingReservation): PersonalVehicleTyp
 /* ------------------------------------------------------------------ */
 
 /**
- * ChargingSession.stopSession + ChargingPoint.stopCharging + ChargingReservation.markCompleted.
+ * ChargingSession.stopSession + ChargingPoint.stopCharging + ChargingBooking.markCompleted.
  * Ghi nhận lượng điện tiêu thụ, chi phí; cập nhật pin xe; giải phóng cổng;
  * nếu bật tự động cấp điện thì chuyển cổng cho xe kế tiếp trong hàng đợi.
  */
@@ -742,7 +679,7 @@ export function completeChargingSession(
   let next: ChargingState = {
     ...state,
     chargingSessions: state.chargingSessions.map((item) => (item.id === sessionId ? completed : item)),
-    chargingReservations: state.chargingReservations.map((item) =>
+    chargingBookings: state.chargingBookings.map((item) =>
       item.id === session.reservationId ? { ...item, status: 'COMPLETED', completedAt: iso(now) } : item,
     ),
     chargingRequests: requests,
@@ -842,7 +779,7 @@ export function prioritizeVehicles(state: ChargingState, hubId: string, now: num
 }
 
 export interface FreePortNow {
-  port: ChargingPort;
+  port: ChargePoint;
   /** Phải trả cổng trước thời điểm này (lịch đặt kế tiếp), null nếu không giới hạn. */
   windowEnd: number | null;
 }
@@ -850,14 +787,14 @@ export interface FreePortNow {
 /** Các cổng có thể cấp điện ngay bây giờ (đủ ít nhất 1 khung giờ trước lịch đặt kế tiếp). */
 export function getFreePortsNow(state: ChargingState, hubId: string, now: number): FreePortNow[] {
   const { slotMinutes, earlyCheckInMinutes, holdMinutes } = state.chargingConfig;
-  return state.chargingPorts
+  return state.chargePoints
     .filter((port) => port.hubId === hubId && !port.underMaintenance)
     .filter(
       (port) => !state.chargingSessions.some((session) => session.portId === port.id && isLiveSession(session)),
     )
     .filter(
       (port) =>
-        !state.chargingReservations.some(
+        !state.chargingBookings.some(
           (reservation) =>
             reservation.portId === port.id &&
             reservation.status === 'CONFIRMED' &&
@@ -1107,11 +1044,11 @@ export function setPortMaintenance(
   underMaintenance: boolean,
   now: number,
 ): OpResult<{ moved: number; cancelled: number }> {
-  const port = state.chargingPorts.find((item) => item.id === portId);
+  const port = state.chargePoints.find((item) => item.id === portId);
   if (!port) return fail('Không tìm thấy cổng sạc.');
   let next: ChargingState = {
     ...state,
-    chargingPorts: state.chargingPorts.map((item) => (item.id === portId ? { ...item, underMaintenance } : item)),
+    chargePoints: state.chargePoints.map((item) => (item.id === portId ? { ...item, underMaintenance } : item)),
   };
   if (!underMaintenance) {
     return {
@@ -1131,13 +1068,13 @@ export function setPortMaintenance(
 
   let moved = 0;
   let cancelled = 0;
-  const upcoming = next.chargingReservations.filter(
+  const upcoming = next.chargingBookings.filter(
     (reservation) => reservation.portId === portId && reservation.status === 'CONFIRMED',
   );
   for (const reservation of upcoming) {
     const start = ms(reservation.startAt);
     const end = ms(reservation.endAt);
-    const replacement = next.chargingPorts.find(
+    const replacement = next.chargePoints.find(
       (candidate) =>
         candidate.hubId === port.hubId &&
         candidate.id !== portId &&
@@ -1146,7 +1083,7 @@ export function setPortMaintenance(
     );
     next = {
       ...next,
-      chargingReservations: next.chargingReservations.map((item) => {
+      chargingBookings: next.chargingBookings.map((item) => {
         if (item.id !== reservation.id) return item;
         if (replacement) {
           moved += 1;
@@ -1186,9 +1123,9 @@ export function setPortMaintenance(
 
 const fingerprint = (state: ChargingState) =>
   JSON.stringify([
-    state.chargingPorts.map((port) => port.status),
+    state.chargePoints.map((port) => port.status),
     state.chargingSessions.map((session) => session.status),
-    state.chargingReservations.map((reservation) => reservation.status),
+    state.chargingBookings.map((reservation) => reservation.status),
     state.hubs.map((hub) => [hub.chargers, hub.activeCharging]),
   ]);
 
@@ -1209,7 +1146,7 @@ export function runChargingTick(state: ChargingState, now: number) {
     .filter((session) => isLiveSession(session) && session.mustEndBy && now >= ms(session.mustEndBy))
     .forEach((session) => {
       const deadline = ms(session.mustEndBy!);
-      const reservationAtDeadline = next.chargingReservations.some(
+      const reservationAtDeadline = next.chargingBookings.some(
         (reservation) =>
           reservation.portId === session.portId &&
           reservation.status === 'CONFIRMED' &&
@@ -1236,8 +1173,8 @@ export const pickChargingState = (data: ChargingState): ChargingState => ({
   hubs: data.hubs,
   vehicles: data.vehicles,
   bookings: data.bookings,
-  chargingPorts: data.chargingPorts,
-  chargingReservations: data.chargingReservations,
+  chargePoints: data.chargePoints,
+  chargingBookings: data.chargingBookings,
   chargingSessions: data.chargingSessions,
   chargingRequests: data.chargingRequests,
   chargingConfig: data.chargingConfig,
