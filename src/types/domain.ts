@@ -6,9 +6,11 @@ import type {
   ChargingSession,
 } from './charging';
 import type { DispatchOrder, DispatchStaff } from './dispatch';
+import type { RedirectOffer, RedirectPlan } from './redirect';
 
 export type * from './charging';
 export type * from './dispatch';
+export type * from './redirect';
 
 /**
  * dispatching: đã được gán vào lệnh điều phối, khóa không cho thuê (Đang điều phối)
@@ -109,6 +111,9 @@ export interface AppData {
   chargingConfig: ChargingConfig;
   dispatchOrders: DispatchOrder[];
   dispatchStaff: DispatchStaff[];
+  /** Phương án điều hướng người dùng và đề xuất gửi tới sinh viên. */
+  redirectPlans: RedirectPlan[];
+  redirectOffers: RedirectOffer[];
   /** Độ lệch đồng hồ mô phỏng (phút) — dùng để "tua nhanh" thời gian khi demo. */
   clockOffsetMinutes: number;
 }

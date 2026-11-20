@@ -5,6 +5,7 @@ import { homeFor, roleLabel } from '../features/auth/authRoutes';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useUiStore } from '../stores/useUiStore';
 import { useChargingTicker } from '../hooks/useSimulationClock';
+import { RedirectNotifier } from '../features/redirect/RedirectNotifier';
 
 interface NavItem {
   to: string;
@@ -108,6 +109,8 @@ export function AppShell() {
         <div className="ml-[250px] min-h-screen p-6 xl:p-8">
           <Outlet />
         </div>
+        {/* Đề xuất điều hướng sang Hub thay thế (chỉ hiện với sinh viên) */}
+        {user.role === 'student' && <RedirectNotifier />}
       </div>
     </ConfigProvider>
   );

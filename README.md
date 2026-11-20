@@ -53,7 +53,7 @@ npm test           # unit test (Vitest) cho lập lịch sạc & điều phối
 - What-if nâng cao (đỉnh điểm Metro, hỏng cổng sạc, nhu cầu sạc).
 - Không có API thật, IoT thật hay bản đồ định tuyến.
 
-## Sạc & điều phối (nhánh `feat/charging-dispatch`)
+## Sạc, điều phối & điều hướng (nhánh `feat/charging-dispatch`)
 
 Logic nghiệp vụ viết dạng hàm thuần, có unit test, bám theo Class diagram / state-chart trong báo cáo:
 
@@ -61,9 +61,10 @@ Logic nghiệp vụ viết dạng hàm thuần, có unit test, bám theo Class d
 |---|---|
 | `src/services/chargingScheduler.ts` | Lịch sạc theo khung giờ, điểm ưu tiên, hàng đợi ưu tiên, overflow, phiên sạc |
 | `src/services/dispatchService.ts` | Vòng đời lệnh điều phối, sức chứa Hub đích, ETA, gợi ý cân bằng xe |
+| `src/services/redirectService.ts` | Phát hiện quá tải, Hub thay thế, phương án điều hướng, phản hồi của sinh viên |
 | `src/stores/slices/chargingSlice.ts`, `dispatchSlice.ts` | Nối service vào `useAppStore` |
 | `src/types/charging.ts`, `src/types/dispatch.ts` | Mô hình dữ liệu (phía nhà điều hành) |
-| `src/services/__tests__/*` | Test case 4.7, 4.8, 4.13–4.16 và các trường hợp biên (`npm test`) |
+| `src/services/__tests__/*` | Test case 4.7, 4.8, 4.13–4.16, điều hướng người dùng và các trường hợp biên (`npm test`) |
 
 **Lịch sạc theo khung giờ** (`/operator/lich-sac`, tab "Lịch theo khung giờ"): sơ đồ theo cổng × khung
 30 phút trong ngày gồm lịch đặt, phiên đang sạc / đã đầy / đã xong, bỏ chỗ. Service chặn trùng lịch theo cổng
@@ -85,6 +86,14 @@ kWh, chi phí, pin cuối của xe, giải phóng cổng và (tuỳ chọn) chuy
 **Điều phối** (`/operator/dieu-phoi`): Khởi tạo → Đã phân công → Đang vận chuyển → Đã hoàn thành / Đã hủy.
 Xe bị khóa khi tạo lệnh, rời Hub nguồn khi xuất phát, nhập Hub đích khi xác nhận giao; Hub đích được giữ
 chỗ trước cho xe đang đến. Theo dõi tiến độ và trễ hạn theo ETA, lịch sử có bộ lọc và nhật ký từng lệnh.
+
+**Điều hướng người dùng** (`/operator/dieu-huong`, sequence 2.9 / activity 3.9): phát hiện Hub có nguy cơ quá
+tải (bãi đỗ ≥ 85%, hết cổng sạc, thiếu xe, cảm biến cảnh báo) → quét Hub thay thế theo bán kính, xếp theo mức phù
+hợp (chỗ trống, cổng sạc, xe, khoảng cách) → nhà điều hành duyệt → gửi đề xuất tới các lịch đặt tại Hub quá tải
+(trả xe, chỗ đỗ, lịch sạc). Sinh viên nhận thông báo ở góc màn hình (`src/features/redirect/RedirectNotifier.tsx`,
+component riêng, không sửa trang sinh viên): *Đồng ý* → lịch đặt chuyển sang Hub mới; *Bỏ qua* → giữ nguyên và cảnh
+báo chờ lâu; Hub mới hết chỗ → giữ nguyên lịch cũ. Có lịch sử phương án và trạng thái từng đề xuất
+(`src/services/redirectService.ts`).
 
 **Demo**: nút đồng hồ ở góc phải (`+5′ / +15′ / +1 giờ`) tua nhanh thời gian để thấy lịch quá hạn, xe sạc đầy,
 xe tới nơi. HUB A4 cổng CS-02 có sẵn lịch mã `SAC246810` bắt đầu sau 5 phút (nhà điều hành check-in được ngay).

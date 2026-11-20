@@ -9,6 +9,8 @@ import type {
   DispatchStaff,
   Hub,
   ParkingSlot,
+  RedirectOffer,
+  RedirectPlan,
   Vehicle,
 } from '../types/domain';
 import { DEFAULT_CHARGING_CONFIG, estimateCharge, estimatePrice, syncChargingState } from '../services/chargingScheduler';
@@ -452,6 +454,23 @@ export function createInitialData(now = Date.now()): AppData {
     }),
   ];
 
+  // Lịch sử: một phương án điều hướng đã kết thúc hôm qua (ga Metro quá tải giờ cao điểm).
+  const redirectPlans: RedirectPlan[] = [
+    {
+      id: 'rd-1', code: 'RD-0001', overloadedHubId: 'h1', targetHubId: 'h2',
+      reasons: ['Bãi đỗ đã dùng 93% (ngưỡng 85%)', 'Hết cổng sạc trống'],
+      overloadedSnapshot: { occupancyRate: 0.93, freeParking: 2, freeChargers: 0, availableVehicles: 1 },
+      targetSnapshot: { occupancyRate: 0.42, freeParking: 14, freeChargers: 3, availableVehicles: 4, distanceKm: hubDistanceKm('h1', 'h2') },
+      operatorName: 'Nhà điều hành Demo', note: 'Giờ tan học, Metro đông', status: 'CLOSED',
+      createdAt: iso(yesterday + 600 * MINUTE), closedAt: iso(yesterday + 690 * MINUTE),
+    },
+  ];
+  const redirectOffers: RedirectOffer[] = [
+    { id: 'ro-1', planId: 'rd-1', kind: 'vehicle_return', refId: 'bk-old-1', refLabel: 'Trả xe EV-021 (mã SEMH482913)', studentName: 'Lê Hoàng Nam', fromHubId: 'h1', toHubId: 'h2', status: 'ACCEPTED', sentAt: iso(yesterday + 600 * MINUTE), respondedAt: iso(yesterday + 604 * MINUTE) },
+    { id: 'ro-2', planId: 'rd-1', kind: 'parking', refId: 'pk-old-1', refLabel: 'Chỗ đỗ A07 (mã DO551203)', studentName: 'Phạm Thu Hà', fromHubId: 'h1', toHubId: 'h2', status: 'REJECTED', sentAt: iso(yesterday + 600 * MINUTE), respondedAt: iso(yesterday + 611 * MINUTE), note: 'Sinh viên bỏ qua' },
+    { id: 'ro-3', planId: 'rd-1', kind: 'charging', refId: 'cs-old-1', refLabel: 'Cổng sạc CS-03 lúc 17:30 (mã SAC660127)', studentName: 'Võ Minh Khang', fromHubId: 'h1', toHubId: 'h2', status: 'EXPIRED', sentAt: iso(yesterday + 600 * MINUTE), respondedAt: iso(yesterday + 690 * MINUTE), note: 'Phương án đã kết thúc' },
+  ];
+
   const vehicles = baseVehicles.map((vehicle) => (vehicle.id === 'v3' ? { ...vehicle, status: 'dispatching' as const } : vehicle));
 
   const data: AppData = {
@@ -470,6 +489,8 @@ export function createInitialData(now = Date.now()): AppData {
     chargingConfig: config,
     dispatchOrders,
     dispatchStaff,
+    redirectPlans,
+    redirectOffers,
     clockOffsetMinutes: 0,
   };
   return { ...data, ...syncChargingState(data, now) };

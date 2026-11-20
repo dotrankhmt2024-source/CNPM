@@ -4,6 +4,7 @@ import type { AppData, Booking, ChargingReservation, HubStatus, ParkingReservati
 import { createInitialData, initialData } from '../mocks/seed';
 import { createChargingActions, type ChargingActions } from './slices/chargingSlice';
 import { createDispatchActions, type DispatchActions } from './slices/dispatchSlice';
+import { createRedirectActions, type RedirectActions } from './slices/redirectSlice';
 
 type Result = { ok: boolean; message: string };
 type ReserveResult = Result & { booking?: Booking };
@@ -11,7 +12,8 @@ type ReturnResult = Result & { durationMinutes?: number };
 
 type Store = AppData &
   ChargingActions &
-  DispatchActions & {
+  DispatchActions &
+  RedirectActions & {
   reset: () => void;
   reserveVehicle: (vehicleId: string, returnHubId?: string) => ReserveResult;
   pickupVehicle: (bookingId: string, code: string) => Result;
@@ -238,6 +240,7 @@ export const useAppStore = create<Store>()(
       // xem stores/slices/chargingSlice.ts, stores/slices/dispatchSlice.ts
       ...createChargingActions(set, get),
       ...createDispatchActions(set, get),
+      ...createRedirectActions(set, get),
 
       updateHubStatus: (hubId, status) =>
         set((state) => ({
@@ -251,6 +254,6 @@ export const useAppStore = create<Store>()(
           ),
         })),
     }),
-    { name: 'smart-emobility-demo-v6' },
+    { name: 'smart-emobility-demo-v7' },
   ),
 );
