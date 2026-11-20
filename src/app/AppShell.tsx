@@ -4,7 +4,7 @@ import { App as AntApp, ConfigProvider, theme } from 'antd';
 import { homeFor, roleLabel } from '../features/auth/authRoutes';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useUiStore } from '../stores/useUiStore';
-import { useChargingTicker } from '../hooks/useSimulationClock';
+import { useChargingTicker, useCrossTabSync } from '../hooks/useSimulationClock';
 import { RedirectNotifier } from '../features/redirect/RedirectNotifier';
 
 interface NavItem {
@@ -41,6 +41,8 @@ export function AppShell() {
   const { message } = AntApp.useApp();
   // Xử lý nền cho lịch sạc: hết hạn giữ chỗ, sạc đầy, nhường cổng cho lịch kế tiếp.
   useChargingTicker();
+  // Đồng bộ dữ liệu khi mở trang sinh viên và nhà điều hành ở hai tab khác nhau.
+  useCrossTabSync();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
