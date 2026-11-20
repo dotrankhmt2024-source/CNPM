@@ -33,3 +33,18 @@ export function useChargingTicker(intervalMs = 5000) {
     return () => window.clearInterval(timer);
   }, [tick, notification, intervalMs]);
 }
+
+/**
+ * Đồng bộ dữ liệu demo giữa các tab: khi tab khác (ví dụ nhà điều hành) ghi dữ liệu,
+ * tab này (ví dụ sinh viên) nạp lại ngay để thấy thay đổi và không ghi đè dữ liệu mới.
+ */
+export function useCrossTabSync() {
+  useEffect(() => {
+    const storageName = useAppStore.persist.getOptions().name;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === storageName && event.newValue) void useAppStore.persist.rehydrate();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+}

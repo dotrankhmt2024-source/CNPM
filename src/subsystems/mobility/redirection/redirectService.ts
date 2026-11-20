@@ -34,6 +34,144 @@ const iso = (time: number) => new Date(time).toISOString();
 let counter = 0;
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}${(counter++).toString(36)}`;
 
+<<<<<<< HEAD:src/subsystems/mobility/redirection/redirectService.ts
+=======
+/** Ngưỡng tỉ lệ chỗ đỗ bị chiếm để coi là quá tải (state-chart Hub: parkingOccupancy ≥ 85%). */
+export const OVERLOAD_OCCUPANCY = 0.85;
+
+export const REDIRECT_KIND_LABEL: Record<RedirectTargetKind, string> = {
+  vehicle_return: 'Trả xe',
+  parking: 'Đặt chỗ đỗ',
+  charging: 'Đặt lịch sạc',
+  general: 'Gợi ý chung',
+};
+
+/* ------------------------------------------------------------------ */
+/* Số liệu & phát hiện quá tải                                         */
+/* ------------------------------------------------------------------ */
+
+export function hubSnapshot(state: Pick<RedirectState, 'hubs' | 'vehicles' | 'chargePoints' | 'dispatchOrders'>, hub: Hub): HubSnapshot {
+  const reservedInbound = inboundReserved(state.dispatchOrders, hub.id);
+  const points = state.chargePoints.filter((point) => point.hubId === hub.id);
+  return {
+    occupancyRate: hub.capacity ? Math.min(1, (hub.occupiedParking + reservedInbound) / hub.capacity) : 1,
+    freeParking: Math.max(0, hub.capacity - hub.occupiedParking - reservedInbound),
+    freeChargers: points.length
+      ? points.filter((point) => point.status === 'free').length
+      : Math.max(0, hub.chargers - hub.activeCharging),
+    availableVehicles: state.vehicles.filter((vehicle) => vehicle.hubId === hub.id && vehicle.status === 'available').length,
+  };
+}
+
+export interface OverloadRisk {
+  hub: Hub;
+  snapshot: HubSnapshot;
+  atRisk: boolean;
+  reasons: string[];
+}
+
+/** detectOverloadRisk: các dấu hiệu Hub có nguy cơ quá tải. */
+export function detectOverloadRisk(state: RedirectState, hub: Hub): OverloadRisk {
+  const snapshot = hubSnapshot(state, hub);
+  const reasons: string[] = [];
+  if (snapshot.occupancyRate >= OVERLOAD_OCCUPANCY) {
+    reasons.push(`Bãi đỗ đã dùng ${Math.round(snapshot.occupancyRate * 100)}% (ngưỡng ${OVERLOAD_OCCUPANCY * 100}%)`);
+  }
+  if (snapshot.freeChargers === 0) reasons.push('Hết cổng sạc trống');
+  // State-chart Hub: availableVehicles <= 10% sức chứa → thiếu hụt xe.
+  if (snapshot.availableVehicles < Math.max(1, Math.floor(hub.capacity * 0.1))) {
+    reasons.push(`Chỉ còn ${snapshot.availableVehicles} xe khả dụng`);
+  }
+  if (hub.status === 'warning') reasons.push('Hệ thống cảm biến báo cảnh báo');
+  if (hub.status === 'maintenance') reasons.push('Hub đang tạm ngưng');
+  return { hub, snapshot, atRisk: reasons.length > 0, reasons };
+}
+
+export const scanOverloadedHubs = (state: RedirectState) =>
+  state.hubs
+    .map((hub) => detectOverloadRisk(state, hub))
+    .sort((a, b) => b.reasons.length - a.reasons.length || b.snapshot.occupancyRate - a.snapshot.occupancyRate);
+
+/* ------------------------------------------------------------------ */
+/* Tìm Hub thay thế                                                     */
+/* ------------------------------------------------------------------ */
+
+export interface AlternativeHub {
+  hub: Hub;
+  snapshot: HubSnapshot;
+  distanceKm: number;
+  /** Điểm phù hợp 0–100: nhiều tài nguyên trống, gần Hub quá tải. */
+  score: number;
+}
+
+/** findNearbyAlternativeHubs: Hub trong bán kính còn chỗ đỗ / xe / cổng sạc, xếp theo mức phù hợp. */
+export function findNearbyAlternativeHubs(state: RedirectState, hubId: string, radiusKm: number | null): AlternativeHub[] {
+  return state.hubs
+    .filter((hub) => hub.id !== hubId && hub.status !== 'maintenance')
+    .map((hub) => {
+      const snapshot = hubSnapshot(state, hub);
+      const distanceKm = hubDistanceKm(hubId, hub.id);
+      const parkingRatio = hub.capacity ? snapshot.freeParking / hub.capacity : 0;
+      const score =
+        40 * parkingRatio +
+        20 * Math.min(1, snapshot.freeChargers / 4) +
+        20 * Math.min(1, snapshot.availableVehicles / 5) +
+        20 * Math.max(0, 1 - distanceKm / 4);
+      return { hub, snapshot, distanceKm, score: Math.round(score) };
+    })
+    .filter((item) => radiusKm === null || item.distanceKm <= radiusKm)
+    .filter((item) => item.snapshot.freeParking > 0 || item.snapshot.freeChargers > 0 || item.snapshot.availableVehicles > 0)
+    .sort((a, b) => b.score - a.score || a.distanceKm - b.distanceKm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Lịch đặt bị ảnh hưởng                                                */
+/* ------------------------------------------------------------------ */
+
+type OfferDraft = Pick<RedirectOffer, 'kind' | 'refId' | 'refLabel' | 'studentName'>;
+
+/** Các lịch đặt của sinh viên đang hướng tới Hub quá tải. */
+export function collectAffectedBookings(state: RedirectState, hubId: string): OfferDraft[] {
+  const vehicleCode = (id: string) => state.vehicles.find((vehicle) => vehicle.id === id)?.code ?? id;
+  const drafts: OfferDraft[] = [];
+  state.bookings
+    .filter((booking) => (booking.status === 'reserved' || booking.status === 'picked_up') && booking.returnHubId === hubId)
+    .forEach((booking) =>
+      drafts.push({
+        kind: 'vehicle_return',
+        refId: booking.id,
+        refLabel: `Trả xe ${vehicleCode(booking.vehicleId)} (mã ${booking.pickupCode})`,
+        studentName: booking.studentName,
+      }),
+    );
+  state.parkingReservations
+    .filter((reservation) => reservation.status === 'reserved' && reservation.hubId === hubId)
+    .forEach((reservation) =>
+      drafts.push({
+        kind: 'parking',
+        refId: reservation.id,
+        refLabel: `Chỗ đỗ ${reservation.slotLabel} (mã ${reservation.code})`,
+        studentName: 'Sinh viên',
+      }),
+    );
+  state.chargingReservations
+    .filter((reservation) => reservation.status === 'reserved' && reservation.hubId === hubId)
+    .forEach((reservation) =>
+      drafts.push({
+        kind: 'charging',
+        refId: reservation.id,
+        refLabel: `Cổng sạc ${reservation.portCode} lúc ${reservation.startTime} (mã ${reservation.code})`,
+        studentName: 'Sinh viên',
+      }),
+    );
+  return drafts;
+}
+
+/* ------------------------------------------------------------------ */
+/* Phê duyệt & kết thúc phương án                                       */
+/* ------------------------------------------------------------------ */
+
+>>>>>>> origin/main:src/services/redirectService.ts
 const nextPlanCode = (plans: RedirectPlan[]) => {
   const max = plans.reduce((top, plan) => Math.max(top, Number(plan.code.replace(/\D/g, '')) || 0), 0);
   return `RD-${String(max + 1).padStart(4, '0')}`;
@@ -257,3 +395,61 @@ export function rejectRedirectionOffer(state: RedirectState, offerId: string, no
     },
   };
 }
+<<<<<<< HEAD:src/subsystems/mobility/redirection/redirectService.ts
+=======
+
+/**
+ * Sinh viên chưa có lịch đặt phản hồi gợi ý chung: Đồng ý (sẽ dùng Hub thay thế) hoặc
+ * Bỏ qua (vẫn tới Hub cũ, kèm cảnh báo chờ lâu). Lựa chọn được ghi nhận cho nhà điều hành.
+ */
+export function respondToGeneralNotice(
+  state: RedirectState,
+  input: { planId: string; studentName: string; accept: boolean },
+  now: number,
+): RedirectResult<{ warning?: string }> {
+  const plan = state.redirectPlans.find((item) => item.id === input.planId);
+  if (!plan || plan.status !== 'ACTIVE') return fail('Phương án điều hướng không còn hiệu lực.');
+  const answered = state.redirectOffers.some(
+    (offer) => offer.planId === plan.id && offer.kind === 'general' && offer.studentName === input.studentName,
+  );
+  if (answered) return fail('Bạn đã phản hồi gợi ý này.');
+  const from = state.hubs.find((hub) => hub.id === plan.overloadedHubId);
+  const to = state.hubs.find((hub) => hub.id === plan.targetHubId);
+  const offer: RedirectOffer = {
+    id: makeId('ro'),
+    planId: plan.id,
+    kind: 'general',
+    refId: plan.id,
+    refLabel: `Gợi ý dùng ${to?.name ?? 'Hub thay thế'} thay cho ${from?.name ?? 'Hub quá tải'}`,
+    studentName: input.studentName,
+    fromHubId: plan.overloadedHubId,
+    toHubId: plan.targetHubId,
+    status: input.accept ? 'ACCEPTED' : 'REJECTED',
+    sentAt: plan.createdAt,
+    respondedAt: iso(now),
+    note: input.accept ? undefined : 'Sinh viên bỏ qua',
+  };
+  return {
+    ok: true,
+    message: input.accept
+      ? `Đã ghi nhận. Hãy tới ${to?.name ?? 'Hub thay thế'} để đặt xe, đỗ xe hoặc sạc.`
+      : 'Đã ghi nhận lựa chọn của bạn.',
+    warning: input.accept ? undefined : `${from?.name ?? 'Hub'} đang quá tải — bạn có thể phải chờ lâu hơn bình thường.`,
+    state: { ...state, redirectOffers: [offer, ...state.redirectOffers] },
+  };
+}
+
+export const pickRedirectState = (data: RedirectState): RedirectState => ({
+  hubs: data.hubs,
+  vehicles: data.vehicles,
+  bookings: data.bookings,
+  parkingSlots: data.parkingSlots,
+  parkingReservations: data.parkingReservations,
+  chargingPorts: data.chargingPorts,
+  chargingReservations: data.chargingReservations,
+  chargePoints: data.chargePoints,
+  dispatchOrders: data.dispatchOrders,
+  redirectPlans: data.redirectPlans,
+  redirectOffers: data.redirectOffers,
+});
+>>>>>>> origin/main:src/services/redirectService.ts
