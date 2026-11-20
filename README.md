@@ -16,6 +16,7 @@ Mở URL Vite hiển thị (thường là http://localhost:5173).
 ```bash
 npm run typecheck
 npm run build
+npm test           # unit test (Vitest) cho lập lịch sạc & điều phối
 ```
 
 ## Đã có
@@ -48,11 +49,45 @@ npm run build
 - Chuyển từng frame Figma thành giao diện pixel-accurate, nhất là mobile.
 - Luồng "Quên mật khẩu" (nút hiện chỉ báo chưa hỗ trợ).
 - Đặt chỗ đỗ có thời gian, hủy đặt chỗ và tránh trùng khung giờ.
-- Lịch sạc theo khung giờ, bộ lập lịch ưu tiên đầy đủ, hoàn tất phiên sạc.
-- Điều phối có lịch sử và trạng thái đang vận chuyển.
-- Quy tắc đồng thời/validation nghiệp vụ nâng cao; unit tests.
+- Quy tắc đồng thời/validation nghiệp vụ nâng cao cho các phân hệ còn lại.
 - What-if nâng cao (đỉnh điểm Metro, hỏng cổng sạc, nhu cầu sạc).
 - Không có API thật, IoT thật hay bản đồ định tuyến.
+
+## Sạc & điều phối (nhánh `feat/charging-dispatch`)
+
+Logic nghiệp vụ viết dạng hàm thuần, có unit test, bám theo Class diagram / state-chart trong báo cáo:
+
+| File | Nội dung |
+|---|---|
+| `src/services/chargingScheduler.ts` | Lịch sạc theo khung giờ, điểm ưu tiên, hàng đợi ưu tiên, overflow, phiên sạc |
+| `src/services/dispatchService.ts` | Vòng đời lệnh điều phối, sức chứa Hub đích, ETA, gợi ý cân bằng xe |
+| `src/stores/slices/chargingSlice.ts`, `dispatchSlice.ts` | Nối service vào `useAppStore` |
+| `src/types/charging.ts`, `src/types/dispatch.ts` | Mô hình dữ liệu |
+| `src/services/__tests__/*` | Test case 4.7, 4.8, 4.13–4.16 và các trường hợp biên (`npm test`) |
+
+**Lịch sạc theo khung giờ** (`/student/dat-sac`): chọn Hub, ngày (7 ngày tới), xe cá nhân/xe đang thuê,
+mức pin hiện tại → mục tiêu. Hệ thống ước tính điện năng và thời lượng (làm tròn theo khung 30 phút),
+hiển thị số cổng trống của từng khung giờ, chặn trùng lịch theo cổng và theo xe, kiểm tra đầu nối AC/DC.
+Khung giờ đầy → gợi ý khung giờ / Hub khác; Hub cao điểm → cảnh báo chờ lâu. Check-in bằng mã từ
+10 phút trước đến 10 phút sau giờ bắt đầu, quá hạn → tự hủy (bỏ chỗ) và giải phóng cổng.
+
+**Bộ lập lịch ưu tiên** (`/operator/lich-sac`): điểm = (100 − pin) × 0,6 + 15 (pin ≤ ngưỡng nguy cấp)
++ tối đa 25 (sắp có chuyến đi trong cửa sổ thời gian) + 10 (xe dùng chung) + tối đa 10 (thời gian chờ).
+"Lập lịch sạc ưu tiên" quét xe pin dưới ngưỡng, xếp hàng đợi, cấp điện theo số cổng trống; xe dư được giữ
+trong hàng đợi kèm thời gian chờ ước tính và Hub thay thế. Xe từ hàng đợi tự nhường cổng khi tới giờ của
+lịch đặt kế tiếp. Có sơ đồ lịch theo khung giờ (Gantt), bảo trì cổng (tự chuyển lịch sang cổng khác),
+chỉnh tham số sạc và lịch sử phiên sạc.
+
+**Hoàn tất phiên sạc**: phiên chuyển "Đã đầy · chờ rút" khi đạt mức mục tiêu; rút sạc / dừng sớm ghi nhận
+kWh, chi phí, pin cuối của xe, giải phóng cổng và (tuỳ chọn) chuyển cổng cho xe ưu tiên kế tiếp.
+
+**Điều phối** (`/operator/dieu-phoi`): Khởi tạo → Đã phân công → Đang vận chuyển → Đã hoàn thành / Đã hủy.
+Xe bị khóa khi tạo lệnh, rời Hub nguồn khi xuất phát, nhập Hub đích khi xác nhận giao; Hub đích được giữ
+chỗ trước cho xe đang đến. Theo dõi tiến độ và trễ hạn theo ETA, lịch sử có bộ lọc và nhật ký từng lệnh.
+
+**Demo**: nút đồng hồ ở góc phải (`+5′ / +15′ / +1 giờ`) tua nhanh thời gian để thấy lịch quá hạn, xe sạc đầy,
+xe tới nơi. Tài khoản sinh viên demo có sẵn lịch mã `SAC246810` (check-in được ngay sau khi tải trang).
+HUB C2 có sẵn dữ liệu test case 4.13/4.14 (5 xe pin 8/15/40/60/75%, 3 cổng trống).
 
 ## Phân công gợi ý
 - UI/Design System: `src/components`, `src/styles`

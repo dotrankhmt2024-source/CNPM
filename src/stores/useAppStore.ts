@@ -1,13 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppData, Booking, ChargingReservation, HubStatus, ParkingReservation } from '../types/domain';
-import { initialData } from '../mocks/seed';
+import type { AppData, Booking, HubStatus, ParkingReservation } from '../types/domain';
+import { createInitialData, initialData } from '../mocks/seed';
+import { createChargingActions, type ChargingActions } from './slices/chargingSlice';
+import { createDispatchActions, type DispatchActions } from './slices/dispatchSlice';
 
 type Result = { ok: boolean; message: string };
 type ReserveResult = Result & { booking?: Booking };
 type ReturnResult = Result & { durationMinutes?: number };
 
-type Store = AppData & {
+type Store = AppData &
+  ChargingActions &
+  DispatchActions & {
   reset: () => void;
   reserveVehicle: (vehicleId: string, returnHubId?: string) => ReserveResult;
   pickupVehicle: (bookingId: string, code: string) => Result;
@@ -20,22 +24,7 @@ type Store = AppData & {
     startTime: string;
     endTime: string;
   }) => Result & { reservation?: ParkingReservation };
-  bookCharging: (input: {
-    hubId: string;
-    portCode: string;
-    date: string;
-    startTime: string;
-    durationMinutes: number;
-    power: number;
-  }) => Result & { reservation?: ChargingReservation };
-  requestCharging: (vehicleId: string) => Result;
-  dispatchVehicles: (input: {
-    fromHubId: string;
-    toHubId: string;
-    quantity: number;
-  }) => Result & { moved?: number };
   updateHubStatus: (hubId: string, status: HubStatus) => void;
-  updateChargingStatus: (id: string, status: 'queued' | 'charging' | 'completed') => void;
   resolveIncident: (id: string) => void;
 };
 
@@ -54,7 +43,7 @@ export const useAppStore = create<Store>()(
     (set, get) => ({
       ...initialData,
 
-      reset: () => set(structuredClone(initialData)),
+      reset: () => set(createInitialData()),
 
       reserveVehicle: (vehicleId, returnHubId) => {
         const state = get();
@@ -206,126 +195,14 @@ export const useAppStore = create<Store>()(
         return { ok: true, message: 'Đặt chỗ đỗ thành công', reservation };
       },
 
-      bookCharging: ({ hubId, portCode, date, startTime, durationMinutes, power }) => {
-        const state = get();
-        const port = state.chargingPorts.find(
-          (item) => item.hubId === hubId && item.code === portCode,
-        );
-        if (!port || port.status !== 'free') {
-          return { ok: false, message: 'Cổng sạc này không còn trống.' };
-        }
-
-        const reservation: ChargingReservation = {
-          id: uid(),
-          hubId,
-          portCode,
-          date,
-          startTime,
-          durationMinutes,
-          power,
-          price: power >= 120 ? 90000 : 50000,
-          code: `SAC${Math.floor(100000 + Math.random() * 900000)}`,
-          status: 'reserved',
-        };
-
-        set({
-          chargingPorts: state.chargingPorts.map((item) =>
-            item.id === port.id ? { ...item, status: 'reserved' } : item,
-          ),
-          chargingReservations: [reservation, ...state.chargingReservations],
-        });
-        return { ok: true, message: 'Đặt chỗ sạc thành công', reservation };
-      },
-
-      requestCharging: (vehicleId) => {
-        const state = get();
-        const vehicle = state.vehicles.find((item) => item.id === vehicleId);
-        if (!vehicle || vehicle.status !== 'available') {
-          return { ok: false, message: 'Xe không khả dụng để đăng ký sạc' };
-        }
-        const hub = state.hubs.find((item) => item.id === vehicle.hubId);
-        if (!hub) return { ok: false, message: 'Không tìm thấy Hub' };
-
-        const canCharge = hub.activeCharging < hub.chargers;
-        set({
-          chargingRequests: [
-            {
-              id: uid(),
-              vehicleId,
-              hubId: vehicle.hubId,
-              priority: 100 - vehicle.battery,
-              status: canCharge ? 'charging' : 'queued',
-            },
-            ...state.chargingRequests,
-          ],
-          vehicles: state.vehicles.map((item) =>
-            item.id === vehicleId
-              ? { ...item, status: canCharge ? 'charging' : 'available' }
-              : item,
-          ),
-          hubs: state.hubs.map((item) =>
-            item.id === hub.id && canCharge
-              ? { ...item, activeCharging: item.activeCharging + 1 }
-              : item,
-          ),
-        });
-        return {
-          ok: true,
-          message: canCharge ? 'Đã bắt đầu phiên sạc mô phỏng' : 'Đã thêm vào hàng đợi sạc',
-        };
-      },
-
-      dispatchVehicles: ({ fromHubId, toHubId, quantity }) => {
-        const state = get();
-        const from = state.hubs.find((item) => item.id === fromHubId);
-        const to = state.hubs.find((item) => item.id === toHubId);
-        if (!from || !to) return { ok: false, message: 'Không tìm thấy Hub' };
-        if (from.id === to.id) return { ok: false, message: 'Hub cần xe và Hub cung cấp xe phải khác nhau.' };
-        if (!Number.isInteger(quantity) || quantity <= 0) {
-          return { ok: false, message: 'Số lượng xe phải là số nguyên dương.' };
-        }
-
-        const availableAtFrom = state.vehicles.filter(
-          (vehicle) => vehicle.hubId === from.id && vehicle.status === 'available',
-        );
-        if (quantity > availableAtFrom.length) {
-          return {
-            ok: false,
-            message: `Hub cung cấp xe không đủ xe (chỉ còn ${availableAtFrom.length} xe khả dụng).`,
-          };
-        }
-
-        const freeAtTo = to.capacity - to.occupiedParking;
-        if (quantity > freeAtTo) {
-          return { ok: false, message: `Hub cần xe không đủ sức chứa (chỉ còn ${freeAtTo} chỗ).` };
-        }
-
-        const movingIds = new Set(availableAtFrom.slice(0, quantity).map((vehicle) => vehicle.id));
-        set({
-          vehicles: state.vehicles.map((vehicle) =>
-            movingIds.has(vehicle.id) ? { ...vehicle, hubId: to.id } : vehicle,
-          ),
-          hubs: state.hubs.map((hub) =>
-            hub.id === from.id
-              ? { ...hub, occupiedParking: Math.max(0, hub.occupiedParking - quantity) }
-              : hub.id === to.id
-                ? { ...hub, occupiedParking: hub.occupiedParking + quantity }
-                : hub,
-          ),
-        });
-        return { ok: true, message: `Đã điều phối ${quantity} xe từ ${from.name} tới ${to.name}.`, moved: quantity };
-      },
+      // Sạc (đặt lịch theo khung giờ, lập lịch ưu tiên, phiên sạc) và điều phối xe:
+      // xem stores/slices/chargingSlice.ts, stores/slices/dispatchSlice.ts
+      ...createChargingActions(set, get),
+      ...createDispatchActions(set, get),
 
       updateHubStatus: (hubId, status) =>
         set((state) => ({
           hubs: state.hubs.map((hub) => (hub.id === hubId ? { ...hub, status } : hub)),
-        })),
-
-      updateChargingStatus: (id, status) =>
-        set((state) => ({
-          chargingRequests: state.chargingRequests.map((item) =>
-            item.id === id ? { ...item, status } : item,
-          ),
         })),
 
       resolveIncident: (id) =>
@@ -335,6 +212,6 @@ export const useAppStore = create<Store>()(
           ),
         })),
     }),
-    { name: 'smart-emobility-demo-v4' },
+    { name: 'smart-emobility-demo-v5' },
   ),
 );

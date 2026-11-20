@@ -4,6 +4,7 @@ import { App as AntApp, ConfigProvider, theme } from 'antd';
 import { homeFor, roleLabel } from '../features/auth/authRoutes';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useUiStore } from '../stores/useUiStore';
+import { useChargingTicker } from '../hooks/useSimulationClock';
 
 interface NavItem {
   to: string;
@@ -37,6 +38,8 @@ export function AppShell() {
   const user = useAuthStore((state) => state.currentUser);
   const dark = useUiStore((state) => state.dark);
   const { message } = AntApp.useApp();
+  // Xử lý nền cho lịch sạc: hết hạn giữ chỗ, sạc đầy, nhường cổng cho lịch kế tiếp.
+  useChargingTicker();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
