@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { App as AntApp, ConfigProvider, theme } from 'antd';
-import { homeFor, roleLabel } from '../features/auth/authRoutes';
-import { useAuthStore } from '../stores/useAuthStore';
-import { useUiStore } from '../stores/useUiStore';
-import { useChargingTicker } from '../hooks/useSimulationClock';
-import { RedirectNotifier } from '../features/redirect/RedirectNotifier';
+import { homeFor, roleLabel } from '@/client/auth/authRoutes';
+import { useAuthStore } from '@/client/api/useAuthStore';
+import { useUiStore } from '@/client/shared/state/useUiStore';
+import { useChargingTicker } from '@/client/shared/hooks/useSimulationClock';
+import { RedirectNotifier } from '@/client/redirect/RedirectNotifier';
 
 interface NavItem {
   to: string;

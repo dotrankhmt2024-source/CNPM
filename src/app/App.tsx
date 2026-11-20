@@ -1,24 +1,24 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { App as AntApp } from 'antd';
-import { OperatorDashboardPage } from '../features/operator/OperatorDashboardPage';
-import { HubManagementPage } from '../features/operator/HubManagementPage';
-import { DispatchPage } from '../features/operator/DispatchPage';
-import { RoutingPage } from '../features/operator/RoutingPage';
-import { ChargingSchedulePage } from '../features/operator/ChargingSchedulePage';
-import { SimulationPage } from '../features/operator/SimulationPage';
-import { DashboardPage } from '../features/student/DashboardPage';
-import { HubSearchPage } from '../features/student/HubSearchPage';
-import { VehicleBookingPage } from '../features/student/VehicleBookingPage';
-import { ParkingPage } from '../features/student/ParkingPage';
-import { ChargingPage } from '../features/student/ChargingPage';
-import { BookingsPage } from '../features/student/BookingsPage';
-import { LoginPage } from '../features/auth/pages/LoginPage';
-import { RegisterPage } from '../features/auth/pages/RegisterPage';
-import { SettingsPage } from '../features/settings/SettingsPage';
-import { ProtectedRoute } from '../features/auth/components/ProtectedRoute';
-import { homeFor } from '../features/auth/authRoutes';
-import { useAuthStore } from '../stores/useAuthStore';
-import { AppShell } from './AppShell';
+import { OperatorDashboardPage } from '@/client/operator/OperatorDashboardPage';
+import { HubManagementPage } from '@/client/operator/HubManagementPage';
+import { DispatchPage } from '@/client/operator/DispatchPage';
+import { RoutingPage } from '@/client/operator/RoutingPage';
+import { ChargingSchedulePage } from '@/client/operator/ChargingSchedulePage';
+import { SimulationPage } from '@/client/operator/SimulationPage';
+import { DashboardPage } from '@/client/student/DashboardPage';
+import { HubSearchPage } from '@/client/student/HubSearchPage';
+import { VehicleBookingPage } from '@/client/student/VehicleBookingPage';
+import { ParkingPage } from '@/client/student/ParkingPage';
+import { ChargingPage } from '@/client/student/ChargingPage';
+import { BookingsPage } from '@/client/student/BookingsPage';
+import { LoginPage } from '@/client/auth/pages/LoginPage';
+import { RegisterPage } from '@/client/auth/pages/RegisterPage';
+import { SettingsPage } from '@/client/settings/SettingsPage';
+import { ProtectedRoute } from '@/client/auth/components/ProtectedRoute';
+import { homeFor } from '@/client/auth/authRoutes';
+import { useAuthStore } from '@/client/api/useAuthStore';
+import { AppShell } from '@/app/AppShell';
 
 /** Vào "/" thì điều hướng về đúng trang chủ của vai trò, chưa đăng nhập thì ra trang login. */
 function HomeRedirect() {
