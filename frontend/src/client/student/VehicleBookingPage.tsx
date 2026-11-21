@@ -71,8 +71,10 @@ export function VehicleBookingPage() {
   const returnVehicle = useAppStore((state) => state.returnVehicle);
 
   const activeBooking =
-    bookings.find((booking) => booking.status === 'reserved' || booking.status === 'picked_up') ??
-    null;
+    bookings.find((booking) => 
+      (booking.status === 'reserved' || booking.status === 'picked_up') &&
+      (booking.status === 'picked_up' || new Date(booking.expiresAt).getTime() > Date.now()),
+  ) ?? null;
 
   const defaultHubId = params.get('hub') ?? hubs[0]?.id ?? '';
   const [hubId, setHubId] = useState(defaultHubId);

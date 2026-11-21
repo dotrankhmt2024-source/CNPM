@@ -224,9 +224,15 @@ describe('APIGateway — nhập mã lấy chỗ / trả chỗ', () => {
   it('lịch sạc: lấy chỗ tạo phiên sạc, trả chỗ kết thúc phiên và giải phóng cổng', () => {
     const dateKey = '2026-11-22';
     const startTime = '09:00';
+    const livePortIds = new Set(
+      gateway.operator
+        .chargingState()
+        .chargingSessions.filter((item) => item.status === 'CHARGING')
+        .map((item) => item.portId),
+    );
     const free = gateway.student
       .chargingSlots('h2', dateKey, startTime, 60)
-      .find((item) => item.status === 'free');
+      .find((item) => item.status === 'free' && !livePortIds.has(item.port.id));
     if (!free) throw new Error('Hub không còn cổng sạc trống');
 
     const booked = gateway.student.bookChargingSlot({

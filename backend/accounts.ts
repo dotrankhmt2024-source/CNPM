@@ -1,8 +1,7 @@
 /**
  * Tài khoản & phiên đăng nhập phía server.
  *
- * Mật khẩu được băm bằng scrypt (kèm salt ngẫu nhiên) — không bao giờ lưu dạng rõ
- * như bản demo chạy hoàn toàn trên trình duyệt trước đây.
+ * Mật khẩu được băm bằng scrypt (kèm salt ngẫu nhiên)
  */
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { db } from './db';

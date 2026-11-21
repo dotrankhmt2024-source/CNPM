@@ -22,11 +22,6 @@ export function HubSearchPage() {
   const countAvailable = (hubId: string) =>
     vehicles.filter((vehicle) => vehicle.hubId === hubId && vehicle.status === 'available').length;
 
-  /**
-   * Demo chưa có dữ liệu bản đồ: nếu chữ người dùng nhập khớp tên/khu vực Hub thì ưu tiên Hub đó,
-   * nếu không khớp gì thì chia danh sách thành 2 nhóm mô phỏng "gần điểm đi" / "gần điểm đến".
-   * Chỉ tính lại khi bấm "Tìm kiếm Hub" (query), không chạy theo từng ký tự đang gõ.
-   */
   const groups = useMemo(() => {
     const matches = (hub: (typeof hubs)[number], text: string) => {
       const keyword = text.trim().toLowerCase();

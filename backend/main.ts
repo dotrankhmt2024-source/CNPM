@@ -10,8 +10,6 @@
  *  POST /api/command         { name, args }   (cần Bearer token)
  *  POST /api/reset           (nhà điều hành)
  *
- * Nếu đã build frontend (`dist/`) thì server phục vụ luôn bản tĩnh đó, để chạy
- * toàn hệ thống bằng một tiến trình duy nhất.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
