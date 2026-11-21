@@ -6,11 +6,9 @@ dist
 *.local
 .preview
 
-# bản sao lưu / tài liệu không commit
 Code BTL CNPM/
 docs/
 
-# dữ liệu sinh ra khi chạy backend (SQLite + WAL)
 backend/data/
 *.db
 *.db-shm
