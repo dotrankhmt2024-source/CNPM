@@ -38,7 +38,9 @@ interface SimResult {
   warning: boolean;
 }
 
-export function SimulationPage() {
+export { WhatIfPage as SimulationPage } from './simulation/WhatIfPage';
+
+export function LegacySimulationPage() {
   const { message } = AntApp.useApp();
   const hubs = useAppStore((state) => state.hubs);
   const vehicles = useAppStore((state) => state.vehicles);

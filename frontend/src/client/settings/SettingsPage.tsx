@@ -1,3 +1,5 @@
+import { AppearanceOptions } from './components/AppearanceOptions';
+import { useTranslation } from '@/client/shared/i18n';
 import { useState } from 'react';
 import { App as AntApp, Button, Switch } from 'antd';
 import { Moon, Sun } from 'lucide-react';
@@ -9,11 +11,15 @@ import { roleLabel } from '@/client/auth/authRoutes';
 
 /** Trang "Thông tin cá nhân" và "Cài đặt tài khoản" dùng chung cho cả hai vai trò. */
 export function SettingsPage() {
+  const t = useTranslation();
+  const selectedTheme = useUiStore(s => s.theme);
+  const setTheme = useUiStore(s => s.setTheme);
+  const language = useUiStore(s => s.language);
   const { message, modal } = AntApp.useApp();
   const user = useAuthStore((state) => state.currentUser);
   const reset = useAppStore((state) => state.reset);
   const dark = useUiStore((state) => state.dark);
-  const toggleDark = useUiStore((state) => state.toggleDark);
+
   // Thiết lập cá nhân lưu trên trình duyệt (backend chưa có API thiết lập riêng).
   const [notifications, setNotifications] = useState(() => {
     try {
@@ -34,25 +40,25 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Cài đặt tài khoản"
-        subtitle="Quản lý thông tin cá nhân và tùy chỉnh trải nghiệm HUB & EV."
-        eyebrow="Cài đặt"
+        title={t('Cài đặt tài khoản', 'Account settings')}
+        subtitle={t('Quản lý thông tin cá nhân và tùy chỉnh trải nghiệm HUB & EV.', 'Manage your profile and appearance preferences.')}
+        eyebrow={t('Cài đặt', 'Settings')}
       />
 
       <section className="card">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">Thông tin cá nhân</h2>
-            <p className="muted-13 mt-1">Thông tin hiển thị trên tài khoản của bạn.</p>
+            <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">{t('Thông tin cá nhân', 'Profile')}</h2>
+            <p className="muted-13 mt-1">{t('Thông tin hiển thị trên tài khoản của bạn.', 'Your account information.')}</p>
           </div>
           <Button onClick={() => message.info('Chưa hỗ trợ chỉnh sửa hồ sơ trong bản demo.')}>
-            Chỉnh sửa hồ sơ
+            {t('Chỉnh sửa hồ sơ', 'Edit profile')}
           </Button>
         </div>
 
         <div className="mt-5 grid gap-6 sm:grid-cols-2">
           <div>
-            <p className="muted-13">Họ và tên</p>
+            <p className="muted-13">{t('Họ và tên', 'Full name')}</p>
             <p className="mt-1 text-[15px] font-semibold text-ink dark:text-slate-100">
               {user?.fullName ?? '—'}
             </p>
@@ -64,23 +70,23 @@ export function SettingsPage() {
             </p>
           </div>
           <div>
-            <p className="muted-13">Vai trò</p>
+            <p className="muted-13">{t('Vai trò', 'Role')}</p>
             <p className="mt-1 text-[15px] font-semibold text-ink dark:text-slate-100">
               {user ? roleLabel[user.role] : '—'}
             </p>
           </div>
           <div>
-            <p className="muted-13">Ngày tạo tài khoản</p>
+            <p className="muted-13">{t('Ngày tạo tài khoản', 'Created on')}</p>
             <p className="mt-1 text-[15px] font-semibold text-ink dark:text-slate-100">
-              {user ? new Date(user.createdAt).toLocaleDateString('vi-VN') : '—'}
+              {user ? new Date(user.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : '—'}
             </p>
           </div>
         </div>
       </section>
 
       <section className="card">
-        <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">Tùy chọn giao diện</h2>
-        <p className="muted-13 mt-1">Chọn giao diện phù hợp với mỗi môi trường sử dụng của bạn.</p>
+        <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">{t('Tùy chọn giao diện', 'Appearance')}</h2>
+        <p className="muted-13 mt-1">{t('Chọn giao diện phù hợp với mỗi môi trường sử dụng của bạn.', 'Choose the appearance that suits your environment.')}</p>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/50">
           <div className="flex items-center gap-3">
@@ -89,9 +95,9 @@ export function SettingsPage() {
             </span>
             <div>
               <p className="text-[15px] font-semibold text-ink dark:text-slate-100">
-                Chế độ hiển thị
+                {t('Chế độ hiển thị', 'Display mode')}
               </p>
-              <p className="muted-13">Áp dụng cho toàn bộ giao diện của hệ thống.</p>
+              <p className="muted-13">{t('Áp dụng cho toàn bộ giao diện của hệ thống.', 'Applies across the application.')}</p>
             </div>
           </div>
 
@@ -99,58 +105,59 @@ export function SettingsPage() {
             <div className="inline-flex rounded-lg border border-line p-1 dark:border-slate-700">
               <button
                 type="button"
-                onClick={() => dark && toggleDark()}
+                onClick={() => setTheme('light')}
                 className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[13px] font-medium transition ${
                   dark ? 'text-muted dark:text-slate-400' : 'bg-[#2563EB] text-white'
                 }`}
               >
                 <Sun size={14} />
-                Sáng
+                {t('Sáng', 'Light')}
               </button>
               <button
                 type="button"
-                onClick={() => !dark && toggleDark()}
+                onClick={() => setTheme('dark')}
                 className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[13px] font-medium transition ${
                   dark ? 'bg-[#2563EB] text-white' : 'text-muted dark:text-slate-400'
                 }`}
               >
                 <Moon size={14} />
-                Tối
+                {t('Tối', 'Dark')}
               </button>
             </div>
             <p className="mt-2 text-[12px] font-medium text-[#2563EB]">
-              Đang chọn: Giao diện {dark ? 'tối' : 'sáng'}
+              {t('Đang chọn:', 'Selected:')} {selectedTheme === 'system' ? t('Tự động', 'System') : dark ? t('Tối', 'Dark') : t('Sáng', 'Light')}
             </p>
           </div>
         </div>
+        <AppearanceOptions />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card">
-          <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">Bảo mật</h2>
-          <p className="muted-13 mt-1">Giữ tài khoản của bạn an toàn.</p>
+          <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">{t('Bảo mật', 'Security')}</h2>
+          <p className="muted-13 mt-1">{t('Giữ tài khoản của bạn an toàn.', 'Keep your account safe.')}</p>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[14px] font-semibold text-ink dark:text-slate-100">Mật khẩu</p>
-              <p className="muted-13">Cập nhật lần gần nhất: chưa có dữ liệu</p>
+              <p className="text-[14px] font-semibold text-ink dark:text-slate-100">{t('Mật khẩu', 'Password')}</p>
+              <p className="muted-13">{t('Cập nhật lần gần nhất: chưa có dữ liệu', 'Last updated: unavailable')}</p>
             </div>
             <Button onClick={() => message.info('Chưa hỗ trợ đổi mật khẩu trong bản demo.')}>
-              Đổi mật khẩu
+              {t('Đổi mật khẩu', 'Change password')}
             </Button>
           </div>
         </section>
 
         <section className="card">
-          <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">Thông báo</h2>
-          <p className="muted-13 mt-1">Quản lý cách bạn nhận cập nhật.</p>
+          <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">{t('Thông báo', 'Notifications')}</h2>
+          <p className="muted-13 mt-1">{t('Quản lý cách bạn nhận cập nhật.', 'Manage your updates.')}</p>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[14px] font-semibold text-ink dark:text-slate-100">
-                Thông báo đặt xe và lịch sạc
+                {t('Thông báo đặt xe và lịch sạc', 'Booking and charging notifications')}
               </p>
-              <p className="muted-13">Nhận thông báo về các hoạt động quan trọng.</p>
+              <p className="muted-13">{t('Nhận thông báo về các hoạt động quan trọng.', 'Receive important activity updates.')}</p>
             </div>
             <div className="flex items-center gap-2">
               <span className={notifications ? 'pill-green' : 'pill-orange'}>
@@ -163,9 +170,9 @@ export function SettingsPage() {
       </div>
 
       <section className="card">
-        <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">Dữ liệu demo</h2>
+        <h2 className="text-[17px] font-bold text-ink dark:text-slate-100">{t('Dữ liệu demo', 'Demo data')}</h2>
         <p className="muted-13 mt-1">
-          Khôi phục toàn bộ dữ liệu mô phỏng (Hub, xe, lượt đặt) về trạng thái ban đầu.
+          {t('Khôi phục toàn bộ dữ liệu mô phỏng (Hub, xe, lượt đặt) về trạng thái ban đầu.', 'Restore demo data to its initial state.')}
         </p>
         <div className="mt-4">
           <Button
@@ -183,7 +190,7 @@ export function SettingsPage() {
               })
             }
           >
-            Khôi phục dữ liệu demo
+            {t('Khôi phục dữ liệu demo', 'Reset demo data')}
           </Button>
         </div>
       </section>

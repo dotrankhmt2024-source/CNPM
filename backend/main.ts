@@ -21,6 +21,7 @@ import { runCommand } from './commands';
 import { resetDemoData } from './services';
 import { createServices } from './services';
 import { loadState } from './db';
+import { simulationRequest } from './simulation/routes';
 
 const PORT = Number(process.env.PORT ?? 4000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -135,6 +136,17 @@ const server = createServer(async (req, res) => {
     }
 
     const user = userFromToken(bearer(req));
+
+    if (path.startsWith('/api/simulation/')) {
+      if (!user) return sendJson(res, 401, { ok: false, message: 'Chưa đăng nhập.' });
+      if (user.role !== 'operator') return sendJson(res, 403, { ok: false, message: 'Chỉ nhà điều hành được mô phỏng.' });
+      const body = req.method === 'POST' ? await readBody(req) : {};
+      try {
+        return sendJson(res, 200, { ok: true, ...simulationRequest(req.method ?? '', path, body, user.id) });
+      } catch (error) {
+        return sendJson(res, 400, { ok: false, message: error instanceof Error ? error.message : 'Thông số không hợp lệ.' });
+      }
+    }
 
     if (path === '/api/me' && req.method === 'GET') {
       return sendJson(res, user ? 200 : 401, user ? { ok: true, user } : { ok: false, message: 'Chưa đăng nhập.' });
