@@ -5,11 +5,15 @@ dist
 *.local
 .preview
 
-# b?n sao c?, không commit
+# b?n sao c?, khï¿½ng commit
 Code BTL CNPM/
 
-# b?n sao c?, không commit
+# b?n sao c?, khï¿½ng commit
 docs/
 
-# b?n sao c?, không commit
+# b?n sao c?, khï¿½ng commit
 docs/
+
+.server-dist/
+dist/
+node_modules/

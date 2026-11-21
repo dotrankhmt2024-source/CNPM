@@ -3,8 +3,17 @@
 Tài liệu này hướng dẫn **từ con số 0**: máy chưa cài gì → chạy được hệ thống
 **Smart E-Mobility Hub (SEMH)** trên máy của bạn.
 
-> Hệ thống là web app (React + TypeScript + Vite), dữ liệu demo lưu trong trình
-> duyệt. **Không cần cài database, không cần backend, không cần Docker.**
+> Hệ thống gồm **frontend** (React + TypeScript + Vite) và **backend** (Node.js +
+> SQLite), dùng chung lõi nghiệp vụ ở `core/`. Chạy được trên máy cá nhân, **không cần
+> cài database server, không cần Docker** (SQLite chỉ là một file trong `backend/data/`).
+>
+> Cấu trúc thư mục:
+>
+> | Thư mục | Vai trò |
+> |---|---|
+> | `frontend/` | Giao diện: `app` (khung + routing), `client` (trang, component, store), `gateway` |
+> | `backend/` | HTTP API + SQLite + đăng nhập (`main.ts`, `db.ts`, `accounts.ts`, `services.ts`, `commands.ts`) |
+> | `core/` | Lõi nghiệp vụ dùng chung: `subsystems`, `shared`, `contracts`, `demo` |
 
 ---
 
@@ -60,7 +69,7 @@ dir        # Windows
 ls         # macOS / Linux
 ```
 
-Phải thấy `package.json`, `index.html`, `src`, `vite.config.ts`.
+Phải thấy `package.json`, `index.html`, `vite.config.ts`, và ba thư mục `frontend`, `backend`, `core`.
 
 ---
 
@@ -79,11 +88,26 @@ npm install
 
 ## Bước 4 — Chạy hệ thống
 
+Cần **hai cửa sổ terminal** (cùng đứng ở thư mục dự án):
+
 ```bash
+# Cửa sổ 1 — backend (API + SQLite), cổng 4000
+npm run server
+```
+
+Chờ tới khi thấy:
+
+```
+SEMH API đang chạy tại http://localhost:4000
+Tài khoản demo: student@demo.local / Student123!  ·  operator@demo.local / Operator123!
+```
+
+```bash
+# Cửa sổ 2 — frontend, cổng 5173
 npm run dev
 ```
 
-Terminal sẽ in ra:
+Terminal thứ hai sẽ in ra:
 
 ```
   VITE v6.x  ready in 500 ms
@@ -92,11 +116,14 @@ Terminal sẽ in ra:
 
 Mở trình duyệt, dán **http://localhost:5173** vào thanh địa chỉ.
 
-> ⚠️ **Giữ nguyên cửa sổ terminal** trong lúc dùng. Tắt terminal = tắt server =
-> trình duyệt báo không kết nối được.
+> ⚠️ **Giữ nguyên cả hai cửa sổ terminal** trong lúc dùng. Tắt cửa sổ backend =
+> trình duyệt báo lỗi gọi API; tắt cửa sổ frontend = không mở được giao diện.
 >
 > ⚠️ **Không** mở file `index.html` bằng cách nhấp đúp — mở kiểu đó sẽ ra trang
 > trắng, vì ứng dụng cần dev server biên dịch TypeScript.
+
+> 💡 Muốn chạy **một tiến trình duy nhất**: `npm run build` rồi `npm run server`,
+> sau đó mở `http://localhost:4000` (server phục vụ luôn bản build frontend).
 
 ---
 

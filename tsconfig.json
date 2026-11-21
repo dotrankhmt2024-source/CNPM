@@ -12,8 +12,47 @@
     "moduleResolution": "Bundler",
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "src/*"
+      "@/app": [
+        "frontend/src/app"
+      ],
+      "@/app/*": [
+        "frontend/src/app/*"
+      ],
+      "@/client": [
+        "frontend/src/client"
+      ],
+      "@/client/*": [
+        "frontend/src/client/*"
+      ],
+      "@/gateway": [
+        "frontend/src/gateway"
+      ],
+      "@/gateway/*": [
+        "frontend/src/gateway/*"
+      ],
+      "@/subsystems": [
+        "core/subsystems"
+      ],
+      "@/subsystems/*": [
+        "core/subsystems/*"
+      ],
+      "@/shared": [
+        "core/shared"
+      ],
+      "@/shared/*": [
+        "core/shared/*"
+      ],
+      "@/contracts": [
+        "core/contracts"
+      ],
+      "@/contracts/*": [
+        "core/contracts/*"
+      ],
+      "@/demo": [
+        "core/demo"
+      ],
+      "@/demo/*": [
+        "core/demo/*"
       ]
     },
     "allowImportingTsExtensions": true,
@@ -26,6 +65,8 @@
     "noUnusedParameters": true
   },
   "include": [
-    "src"
+    "frontend/src",
+    "core",
+    "backend"
   ]
 }
