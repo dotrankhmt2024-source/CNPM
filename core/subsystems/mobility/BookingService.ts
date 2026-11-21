@@ -35,6 +35,7 @@ export class BookingService implements IBooking {
   }
 
   reserveVehicle({ vehicleId, returnHubId }: VehicleBookingInput): ApiResult<{ booking?: Booking }> {
+    this.expireOverdue(Date.now());
     const state = this.persistence.load();
     const vehicle = state.vehicles.find((item) => item.id === vehicleId);
     if (!vehicle || vehicle.status !== 'available') {
@@ -80,6 +81,7 @@ export class BookingService implements IBooking {
       return { ok: false, message: 'Không tìm thấy lượt đặt đang chờ nhận xe' };
     }
     if (booking.expiresAt && new Date(booking.expiresAt).getTime() < Date.now()) {
+      this.expireOverdue(Date.now());
       return { ok: false, message: 'Mã nhận xe đã hết hạn. Vui lòng đặt lại xe.' };
     }
     if (booking.pickupCode !== code.trim()) {
@@ -159,5 +161,21 @@ export class BookingService implements IBooking {
       ),
     });
     return { ok: true, message: 'Đã hủy lượt đặt xe' };
+  }
+
+  expireOverdue(now: number): number {
+    const state = this.persistence.load();
+  const expired = state.bookings.filter(
+    (b) => b.status === 'reserved' && b.expiresAt && new Date(b.expiresAt).getTime() < now,
+  );
+  if (expired.length === 0) return 0;
+
+  const ids = new Set(expired.map((b) => b.id));
+  const vehicleIds = new Set(expired.map((b) => b.vehicleId));
+  this.persistence.save({
+    bookings: state.bookings.map((b) => (ids.has(b.id) ? { ...b, status: 'cancelled' } : b)),
+    vehicles: state.vehicles.map((v) => (vehicleIds.has(v.id) ? { ...v, status: 'available' } : v)),
+  });
+  return expired.length;
   }
 }
