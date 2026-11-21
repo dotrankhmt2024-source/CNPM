@@ -57,7 +57,7 @@ Nếu báo *"node is not recognized"* → chưa cài đúng hoặc chưa mở te
 **Cách khác:** mở terminal rồi `cd` tới thư mục:
 
 ```bash
-cd "D:\A_Tai_Lieu\DH\CNPM\BTL\submission_3\Chuẩn\CNPM"
+cd "D:\A_Tai_Lieu\DH\CNPM\BTL\submission_3\CNPM"
 ```
 
 > Có dấu cách hoặc tiếng Việt trong đường dẫn thì **luôn đặt trong dấu ngoặc kép**.
