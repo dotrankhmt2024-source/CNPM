@@ -1,0 +1,107 @@
+import type { NetworkSnapshot, WhatIfScenario, WhatIfResult, Recommendation, ScenarioRepository } from '../../../shared/types/simulation';
+
+export function validateScenario(snapshot: NetworkSnapshot, input: WhatIfScenario): void {
+  if (!snapshot.hubs.length) throw new Error('Không có dữ liệu mạng lưới để mô phỏng.');
+  if (!input.name.trim()) throw new Error('Vui lòng nhập tên kịch bản.');
+  if (!input.hubIds.length || new Set(input.hubIds).size !== input.hubIds.length ||
+      input.hubIds.some(id => !snapshot.hubs.some(hub => hub.id === id))) {
+    throw new Error('Danh sách Hub không hợp lệ.');
+  }
+  const ranges: [number, number, number][] = [
+    [input.durationMinutes, 1, 1440], [input.demandGrowthPercent, 0, 1000],
+    [input.arrivalsPerMinute, 0, 10000], [input.departuresPerMinute, 0, 10000],
+    [input.disabledChargers, 0, 10000], [input.capacityReductionPercent, 0, 100],
+    [input.chargingDemand, 0, 100000], [input.averageSessionMinutes, 1, 1440],
+    [input.energyPerSessionKwh, 0, 1000],
+  ];
+  if (ranges.some(([value, min, max]) => !Number.isFinite(value) || value < min || value > max) ||
+      !Number.isInteger(input.disabledChargers) || !Number.isInteger(input.chargingDemand)) {
+    throw new Error('Thông số kịch bản không hợp lệ.');
+  }
+  for (const hub of snapshot.hubs) {
+    if ([hub.capacity, hub.occupiedParking, hub.chargers, hub.activeCharging].some(n => !Number.isFinite(n) || n < 0)) {
+      throw new Error('Dữ liệu Hub không hợp lệ.');
+    }
+    if (input.hubIds.includes(hub.id) && input.disabledChargers > hub.chargers) {
+      throw new Error('Số cổng hỏng vượt số cổng của Hub.');
+    }
+  }
+}
+
+/** Deterministic aggregate estimate, never writes to operational state. */
+export class WhatIfEngine {
+  run(snapshot: NetworkSnapshot, scenario: WhatIfScenario): WhatIfResult {
+    validateScenario(snapshot, scenario);
+    const hubs = snapshot.hubs.map(hub => {
+      const selected = scenario.hubIds.includes(hub.id);
+      const growth = 1 + scenario.demandGrowthPercent / 100;
+      const arrivals = selected ? Math.ceil(scenario.arrivalsPerMinute * scenario.durationMinutes * growth) : 0;
+      const requestedDepartures = selected ? Math.ceil(scenario.departuresPerMinute * scenario.durationMinutes * growth) : 0;
+      const available = snapshot.vehicles.filter(v => v.hubId === hub.id && v.status === 'available').length;
+      // Conservative: arriving vehicles are not assumed ready to rent during this horizon.
+      const departures = Math.min(requestedDepartures, available, hub.occupiedParking);
+      const capacity = selected ? Math.floor(hub.capacity * (1 - scenario.capacityReductionPercent / 100)) : hub.capacity;
+      const projectedOccupancy = Math.max(0, hub.occupiedParking + arrivals - departures);
+      const operational = Math.max(0, hub.chargers - (selected ? scenario.disabledChargers : 0));
+      const chargingDemand = selected ? Math.ceil(scenario.chargingDemand * growth) : 0;
+      const freeChargers = Math.max(0, operational - hub.activeCharging);
+      const chargingQueue = Math.max(0, hub.activeCharging + chargingDemand - operational);
+      return {
+        hubId: hub.id, name: hub.name, capacity, currentOccupancy: hub.occupiedParking,
+        projectedOccupancy, overflow: Math.max(0, projectedOccupancy - capacity),
+        utilization: capacity ? projectedOccupancy / capacity : projectedOccupancy ? 1 : 0,
+        availableVehicles: available - departures, vehicleShortage: requestedDepartures - departures,
+        freeChargers, chargingQueue,
+        waitMinutes: operational ? Math.ceil(chargingQueue / operational) * scenario.averageSessionMinutes : chargingQueue ? null : 0,
+        energyDemandKwh: chargingDemand * scenario.energyPerSessionKwh,
+      };
+    });
+    const recommendations: Recommendation[] = [];
+    // Budgets prevent suggesting the same spare vehicle/parking space twice.
+    const spareVehicles = new Map(hubs.map(h => [h.hubId, h.availableVehicles]));
+    const spareParking = new Map(hubs.map(h => [h.hubId, Math.max(0, h.capacity - h.projectedOccupancy)]));
+    for (const hub of hubs) {
+      let shortage = hub.vehicleShortage;
+      for (const donor of hubs) {
+        if (donor.hubId === hub.hubId || !shortage) continue;
+        const quantity = Math.min(shortage, spareVehicles.get(donor.hubId) ?? 0, spareParking.get(hub.hubId) ?? 0);
+        if (!quantity) continue;
+        recommendations.push({ kind: 'dispatch', hubId: donor.hubId, targetHubId: hub.hubId, quantity,
+          message: `Đề xuất chuyển ${quantity} xe từ ${donor.name} tới ${hub.name}.` });
+        spareVehicles.set(donor.hubId, spareVehicles.get(donor.hubId)! - quantity);
+        spareParking.set(hub.hubId, spareParking.get(hub.hubId)! - quantity);
+        shortage -= quantity;
+      }
+      if (shortage) recommendations.push({ kind: 'monitor', hubId: hub.hubId, quantity: shortage,
+        message: `Còn thiếu ${shortage} xe; cần bổ sung nguồn xe hoặc giảm nhu cầu.` });
+      let overflow = hub.overflow;
+      for (const target of hubs) {
+        if (target.hubId === hub.hubId || !overflow) continue;
+        const quantity = Math.min(overflow, spareParking.get(target.hubId) ?? 0);
+        if (!quantity) continue;
+        recommendations.push({ kind: 'redirect', hubId: hub.hubId, targetHubId: target.hubId, quantity,
+          message: `Đề xuất chuyển ${quantity} lượt đỗ sang ${target.name}; cần kiểm tra khoảng cách trước khi duyệt.` });
+        spareParking.set(target.hubId, spareParking.get(target.hubId)! - quantity);
+        overflow -= quantity;
+      }
+      if (overflow) recommendations.push({ kind: 'monitor', hubId: hub.hubId, quantity: overflow,
+        message: `Thiếu ${overflow} chỗ đỗ sau khi xét các Hub thay thế.` });
+      if (hub.chargingQueue) recommendations.push({ kind: 'charging', hubId: hub.hubId, quantity: hub.chargingQueue,
+        message: hub.waitMinutes === null ? 'Không còn cổng hoạt động: khôi phục cổng hoặc đổi Hub sạc.' : `Ưu tiên xe pin thấp, giãn lịch ${hub.chargingQueue} xe; ước tính chờ tối đa ${hub.waitMinutes} phút.` });
+      if (hub.utilization >= 0.9 && !hub.overflow) recommendations.push({ kind: 'monitor', hubId: hub.hubId,
+        message: `${hub.name} đạt ít nhất 90% sức chứa; theo dõi và hạn chế nhận thêm lượt đỗ.` });
+    }
+    return {
+      scenario: structuredClone(scenario), snapshot: structuredClone(snapshot), hubs, recommendations,
+      summary: { overloadedHubs: hubs.filter(h => h.utilization >= 0.9).length,
+        averageUtilization: hubs.reduce((sum, h) => sum + h.utilization, 0) / hubs.length,
+        energyDemandKwh: hubs.reduce((sum, h) => sum + h.energyDemandKwh, 0) },
+      assumptions: ['Tham số áp dụng riêng cho mỗi Hub được chọn.', 'Dòng xe đến/đi không đổi trong thời gian mô phỏng.',
+        'Thời gian chờ là ước tính theo lô sạc có thời lượng bằng nhau.', 'Khuyến nghị cần người vận hành duyệt; không tự thay đổi dữ liệu thật.'],
+    };
+  }
+
+  runAndSave(snapshot: NetworkSnapshot, scenario: WhatIfScenario, repository: ScenarioRepository) {
+    return repository.save(this.run(snapshot, scenario));
+  }
+}

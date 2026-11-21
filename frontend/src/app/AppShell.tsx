@@ -1,3 +1,7 @@
+import { useTranslation } from '@/client/shared/i18n';
+import { useAppearance } from '@/client/shared/hooks/useAppearance';
+import enUS from 'antd/locale/en_US';
+import viVN from 'antd/locale/vi_VN';
 import { useEffect } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { App as AntApp, ConfigProvider, theme } from 'antd';
@@ -35,6 +39,9 @@ const navByRole = { student: studentNav, operator: operatorNav };
 /** Khung ứng dụng sau đăng nhập: sidebar tối cố định + vùng nội dung sáng. */
 export function AppShell() {
   const navigate = useNavigate();
+  useAppearance();
+  const t = useTranslation();
+  const language = useUiStore(s => s.language);
   const user = useAuthStore((state) => state.currentUser);
   const dark = useUiStore((state) => state.dark);
   const { message } = AntApp.useApp();
@@ -52,6 +59,7 @@ export function AppShell() {
 
   return (
     <ConfigProvider
+      locale={language === 'en' ? enUS : viVN}
       theme={{
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: { colorPrimary: '#176B5B', borderRadius: 10 },
@@ -82,7 +90,7 @@ export function AppShell() {
                   }`
                 }
               >
-                {item.label}
+                {t(item.label)}
               </NavLink>
             ))}
           </nav>
@@ -93,14 +101,14 @@ export function AppShell() {
               onClick={() => navigate(settingsPath)}
               className="w-full rounded-lg px-1 py-2.5 text-left text-sm text-[#AFC1D4] transition hover:bg-white/5"
             >
-              Cài đặt hệ thống
+              {t('Cài đặt hệ thống', 'Settings')}
             </button>
             <button
               type="button"
               onClick={() => message.info('Chưa hỗ trợ trong bản demo.')}
               className="w-full rounded-lg px-1 py-2.5 text-left text-sm text-[#AFC1D4] transition hover:bg-white/5"
             >
-              Trợ giúp
+              {t('Trợ giúp', 'Help')}
             </button>
           </div>
         </aside>
