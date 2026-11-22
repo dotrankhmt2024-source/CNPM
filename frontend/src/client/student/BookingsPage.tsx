@@ -36,7 +36,7 @@ export function BookingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Lịch của tôi"
-        subtitle="Các lượt đặt xe gần đây. Mã nhận/trả xe được dùng ở trang Đặt xe điện."
+        subtitle="Các lượt đặt xe gần đây."
       />
 
       {bookings.length === 0 ? (
