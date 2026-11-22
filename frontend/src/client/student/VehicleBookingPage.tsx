@@ -129,7 +129,7 @@ export function VehicleBookingPage() {
     setHubId(nextHubId);
     setVehicleId(null);
     if (returnHubId === nextHubId) {
-      setReturnHubId(hubs.find((item) => item.id !== nextHubId)?.id ?? nextHubId);
+      //setReturnHubId(hubs.find((item) => item.id !== nextHubId)?.id ?? nextHubId);
     }
     setPicker(null);
   };
