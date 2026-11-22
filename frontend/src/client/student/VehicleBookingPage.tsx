@@ -210,9 +210,9 @@ export function VehicleBookingPage() {
         <PageHeader
           title="Đặt xe điện"
           subtitle={
-            activeBooking
-              ? 'Chọn HUB nhận xe, phương tiện.'
-              : 'Chọn HUB nhận xe, phương tiện và thời gian sử dụng.'
+            //activeBooking
+              'Chọn HUB nhận xe, phương tiện.'
+              //'Chọn HUB nhận xe, phương tiện và thời gian sử dụng.'
           }
         />
 
