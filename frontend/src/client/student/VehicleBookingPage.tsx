@@ -71,8 +71,10 @@ export function VehicleBookingPage() {
   const returnVehicle = useAppStore((state) => state.returnVehicle);
 
   const activeBooking =
-    bookings.find((booking) => booking.status === 'reserved' || booking.status === 'picked_up') ??
-    null;
+    bookings.find((booking) => 
+      (booking.status === 'reserved' || booking.status === 'picked_up') &&
+      (booking.status === 'picked_up' || new Date(booking.expiresAt).getTime() > Date.now()),
+  ) ?? null;
 
   const defaultHubId = params.get('hub') ?? hubs[0]?.id ?? '';
   const [hubId, setHubId] = useState(defaultHubId);
@@ -127,7 +129,7 @@ export function VehicleBookingPage() {
     setHubId(nextHubId);
     setVehicleId(null);
     if (returnHubId === nextHubId) {
-      setReturnHubId(hubs.find((item) => item.id !== nextHubId)?.id ?? nextHubId);
+      //setReturnHubId(hubs.find((item) => item.id !== nextHubId)?.id ?? nextHubId);
     }
     setPicker(null);
   };
@@ -208,9 +210,9 @@ export function VehicleBookingPage() {
         <PageHeader
           title="Đặt xe điện"
           subtitle={
-            activeBooking
-              ? 'Chọn HUB nhận xe, phương tiện.'
-              : 'Chọn HUB nhận xe, phương tiện và thời gian sử dụng.'
+            //activeBooking
+              'Chọn HUB nhận xe, phương tiện.'
+              //'Chọn HUB nhận xe, phương tiện và thời gian sử dụng.'
           }
         />
 

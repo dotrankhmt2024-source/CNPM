@@ -1,19 +1,15 @@
 node_modules
 dist
+.server-dist
 .env
 .DS_Store
 *.local
 .preview
 
-# b?n sao c?, kh�ng commit
 Code BTL CNPM/
-
-# b?n sao c?, kh�ng commit
 docs/
 
-# b?n sao c?, kh�ng commit
-docs/
-
-.server-dist/
-dist/
-node_modules/
+backend/data/
+*.db
+*.db-shm
+*.db-wal

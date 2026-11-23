@@ -1,14 +1,14 @@
 /**
  * Bảng lệnh (command) mà client được phép gọi.
  *
- * Mỗi lệnh tương ứng đúng một thao tác ghi của APIGateway ở client. Cách này giữ
- * backend gọn, nhưng vẫn đảm bảo mọi quy tắc nghiệp vụ chạy ở server.
+ * Mỗi lệnh tương ứng đúng một thao tác ghi của APIGateway ở client.
  */
 import type { ServerServices } from './services';
 
 export type CommandResult = { ok: boolean; message: string } & Record<string, unknown>;
 
 type Handler = (services: ServerServices, args: Record<string, unknown>) => unknown;
+
 
 const str = (args: Record<string, unknown>, key: string) => String(args[key] ?? '');
 
@@ -85,6 +85,7 @@ export const commands: Record<string, Handler> = {
   'system.tickCharging': (s) => {
     const events = s.scheduling.tick();
     s.parkingCharging.expireOverdue(s.clock.now());
+    s.booking.expireOverdue(Date.now());
     return { ok: true, message: '', events };
   },
 };
