@@ -12,6 +12,14 @@ export interface WhatIfScenario {
   chargingDemand: number;
   averageSessionMinutes: number;
   energyPerSessionKwh: number;
+  brokenVehiclePercent?: number;
+  initialVehicleCount?: number;
+  averageBattery?: number;
+  priorityBatteryThreshold?: number;
+  holdMinutes?: number;
+  chargingPriorityWeight?: number;
+  /** Omitted key applies to every selected Hub. */
+  parameterHubIds?: Record<string, string[] | undefined>;
 }
 
 export interface NetworkSnapshot { hubs: Hub[]; vehicles: Vehicle[] }

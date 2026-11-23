@@ -14,6 +14,13 @@ export function validateScenario(snapshot: NetworkSnapshot, input: WhatIfScenari
     [input.chargingDemand, 0, 100000], [input.averageSessionMinutes, 1, 1440],
     [input.energyPerSessionKwh, 0, 1000],
   ];
+  for (const [value, max] of [[input.brokenVehiclePercent, 100], [input.initialVehicleCount, 100000],
+    [input.averageBattery, 100], [input.priorityBatteryThreshold, 100], [input.holdMinutes, 1440], [input.chargingPriorityWeight, 100]]) {
+    if (value !== undefined) ranges.push([value, 0, max!]);
+  }
+  for (const ids of Object.values(input.parameterHubIds ?? {})) {
+    if (ids && (!ids.length || ids.some(id => !snapshot.hubs.some(h => h.id === id)))) throw new Error('Phạm vi tham số không hợp lệ.');
+  }
   if (ranges.some(([value, min, max]) => !Number.isFinite(value) || value < min || value > max) ||
       !Number.isInteger(input.disabledChargers) || !Number.isInteger(input.chargingDemand)) {
     throw new Error('Thông số kịch bản không hợp lệ.');
@@ -22,7 +29,7 @@ export function validateScenario(snapshot: NetworkSnapshot, input: WhatIfScenari
     if ([hub.capacity, hub.occupiedParking, hub.chargers, hub.activeCharging].some(n => !Number.isFinite(n) || n < 0)) {
       throw new Error('Dữ liệu Hub không hợp lệ.');
     }
-    if (input.hubIds.includes(hub.id) && input.disabledChargers > hub.chargers) {
+    if (input.hubIds.includes(hub.id) && (!input.parameterHubIds?.disabledChargers || input.parameterHubIds.disabledChargers.includes(hub.id)) && input.disabledChargers > hub.chargers) {
       throw new Error('Số cổng hỏng vượt số cổng của Hub.');
     }
   }
@@ -34,16 +41,26 @@ export class WhatIfEngine {
     validateScenario(snapshot, scenario);
     const hubs = snapshot.hubs.map(hub => {
       const selected = scenario.hubIds.includes(hub.id);
-      const growth = 1 + scenario.demandGrowthPercent / 100;
-      const arrivals = selected ? Math.ceil(scenario.arrivalsPerMinute * scenario.durationMinutes * growth) : 0;
-      const requestedDepartures = selected ? Math.ceil(scenario.departuresPerMinute * scenario.durationMinutes * growth) : 0;
-      const available = snapshot.vehicles.filter(v => v.hubId === hub.id && v.status === 'available').length;
+      const value = (key: keyof WhatIfScenario, fallback: number) => selected &&
+        (!scenario.parameterHubIds?.[key] || scenario.parameterHubIds[key]!.includes(hub.id)) ? Number(scenario[key] ?? fallback) : fallback;
+      const growth = 1 + value('demandGrowthPercent', 0) / 100;
+      const duration = value('durationMinutes', 30);
+      const arrivals = selected ? Math.ceil(value('arrivalsPerMinute', 0) * duration * growth) : 0;
+      const requestedDepartures = selected ? Math.ceil(value('departuresPerMinute', 0) * duration * growth) : 0;
+      const actualFleet = snapshot.vehicles.filter(v => v.hubId === hub.id);
+      const fleet = scenario.initialVehicleCount === undefined ? actualFleet.length : Math.round(value('initialVehicleCount', snapshot.vehicles.length) *
+        (snapshot.vehicles.length ? actualFleet.length / snapshot.vehicles.length : 1 / snapshot.hubs.length));
+      const availableRatio = actualFleet.length ? actualFleet.filter(v => v.status === 'available').length / actualFleet.length : 1;
+      const available = Math.floor(fleet * availableRatio * (1 - value('brokenVehiclePercent', 0) / 100));
       // Conservative: arriving vehicles are not assumed ready to rent during this horizon.
       const departures = Math.min(requestedDepartures, available, hub.occupiedParking);
-      const capacity = selected ? Math.floor(hub.capacity * (1 - scenario.capacityReductionPercent / 100)) : hub.capacity;
+      const capacity = selected ? Math.floor(hub.capacity * (1 - value('capacityReductionPercent', 0) / 100)) : hub.capacity;
       const projectedOccupancy = Math.max(0, hub.occupiedParking + arrivals - departures);
-      const operational = Math.max(0, hub.chargers - (selected ? scenario.disabledChargers : 0));
-      const chargingDemand = selected ? Math.ceil(scenario.chargingDemand * growth) : 0;
+      const operational = Math.max(0, hub.chargers - value('disabledChargers', 0));
+      const battery = value('averageBattery', 100);
+      const priorityFraction = battery <= value('priorityBatteryThreshold', 0) ? value('chargingPriorityWeight', 0) / 100 : 0;
+      const lowBatteryDemand = Math.ceil(fleet * priorityFraction);
+      const chargingDemand = selected ? Math.ceil(value('chargingDemand', 0) * growth) + lowBatteryDemand : 0;
       const freeChargers = Math.max(0, operational - hub.activeCharging);
       const chargingQueue = Math.max(0, hub.activeCharging + chargingDemand - operational);
       return {
@@ -52,8 +69,8 @@ export class WhatIfEngine {
         utilization: capacity ? projectedOccupancy / capacity : projectedOccupancy ? 1 : 0,
         availableVehicles: available - departures, vehicleShortage: requestedDepartures - departures,
         freeChargers, chargingQueue,
-        waitMinutes: operational ? Math.ceil(chargingQueue / operational) * scenario.averageSessionMinutes : chargingQueue ? null : 0,
-        energyDemandKwh: chargingDemand * scenario.energyPerSessionKwh,
+        waitMinutes: operational ? Math.ceil(chargingQueue / operational) * (value('averageSessionMinutes', 30) + value('holdMinutes', 0)) : chargingQueue ? null : 0,
+        energyDemandKwh: chargingDemand * value('energyPerSessionKwh', 2),
       };
     });
     const recommendations: Recommendation[] = [];
@@ -96,7 +113,10 @@ export class WhatIfEngine {
       summary: { overloadedHubs: hubs.filter(h => h.utilization >= 0.9).length,
         averageUtilization: hubs.reduce((sum, h) => sum + h.utilization, 0) / hubs.length,
         energyDemandKwh: hubs.reduce((sum, h) => sum + h.energyDemandKwh, 0) },
-      assumptions: ['Tham số áp dụng riêng cho mỗi Hub được chọn.', 'Dòng xe đến/đi không đổi trong thời gian mô phỏng.',
+      assumptions: ['Số xe ban đầu là tổng mạng lưới, phân bổ theo tỷ trọng xe hiện có; xe hỏng làm giảm lượng xe khả dụng.',
+        'Nếu pin trung bình dưới ngưỡng ưu tiên, tỷ lệ xe cần sạc thêm được ước tính bằng trọng số ưu tiên.',
+        'Thời gian giữ chỗ được cộng vào thời lượng chiếm cổng khi ước tính chờ sạc.',
+        'Tham số áp dụng riêng cho mỗi Hub được chọn.', 'Dòng xe đến/đi không đổi trong thời gian mô phỏng.',
         'Thời gian chờ là ước tính theo lô sạc có thời lượng bằng nhau.', 'Khuyến nghị cần người vận hành duyệt; không tự thay đổi dữ liệu thật.'],
     };
   }

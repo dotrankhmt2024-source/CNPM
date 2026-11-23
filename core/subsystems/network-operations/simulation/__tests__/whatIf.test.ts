@@ -47,4 +47,19 @@ describe('What-if', () => {
       expect(repository.get('missing')).toBeNull();
     } finally { db.close(); }
   });
+  it('applies a parameter only to its selected hubs', () => {
+    const result = engine.run(snapshot, { ...scenario, hubIds: ['a', 'b'], parameterHubIds: { arrivalsPerMinute: ['a'] } });
+    expect(result.hubs[0].projectedOccupancy).toBe(18);
+    expect(result.hubs[1].projectedOccupancy).toBe(2);
+    expect(() => engine.run(snapshot, { ...scenario, parameterHubIds: { arrivalsPerMinute: ['missing'] } })).toThrow();
+  });
+  it('uses the Figma fleet and battery settings without changing the snapshot', () => {
+    const result = engine.run(snapshot, { ...scenario, initialVehicleCount: 20, brokenVehiclePercent: 50,
+      averageBattery: 10, priorityBatteryThreshold: 20, chargingPriorityWeight: 40, holdMinutes: 10 });
+    expect(result.hubs[0].availableVehicles).toBe(5);
+    expect(result.hubs[0].chargingQueue).toBe(8);
+    expect(result.hubs[0].waitMinutes).toBe(160);
+    expect(snapshot.vehicles).toHaveLength(0);
+    expect(() => engine.run(snapshot, { ...scenario, averageBattery: 101 })).toThrow();
+  });
 });

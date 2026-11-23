@@ -25,7 +25,9 @@ const fields: [keyof WhatIfScenario, string][] = [
 ];
 
 /** Plain .ts React component: createElement is equivalent to JSX. */
-export function WhatIfPage() {
+export { FigmaWhatIfPage as WhatIfPage } from './FigmaWhatIfPage';
+
+export function LegacyWhatIfPage() {
   const hubs = useAppStore(s => s.hubs);
   const [scenario, setScenario] = useState<WhatIfScenario>(defaults);
   const [result, setResult] = useState<WhatIfResult | null>(null);
